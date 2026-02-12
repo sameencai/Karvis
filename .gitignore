@@ -1,0 +1,41 @@
+# 环境变量（含密钥）
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 第三方依赖（SCF 部署时打包，不入库）
+cloud_function/bin/
+cloud_function/blinker*/
+cloud_function/certifi*/
+cloud_function/charset_normalizer*/
+cloud_function/click*/
+cloud_function/Crypto/
+cloud_function/flask*/
+cloud_function/idna*/
+cloud_function/itsdangerous*/
+cloud_function/jinja2*/
+cloud_function/markupsafe*/
+cloud_function/pycryptodome*/
+cloud_function/requests*/
+cloud_function/tencentcloud*/
+cloud_function/urllib3*/
+cloud_function/werkzeug*/
+cloud_function/*.dist-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

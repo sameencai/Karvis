@@ -1,0 +1,172 @@
+# SKILLS — 技能清单
+
+> 以下是你可以使用的所有 skill。根据用户的消息内容，选择最合适的 skill 和参数。
+
+---
+
+## note.save
+保存用户消息到 Quick-Notes.md。
+
+**参数**：
+- `content`: string — 要保存的内容
+- `category`: string (可选) — 分类标签
+
+**触发条件**：用户发来普通消息、图片、语音、视频、链接
+
+---
+
+## checkin.start
+开始每日打卡流程。
+
+**参数**：无
+
+**触发条件**：用户说"打卡"、"签到"、"开始打卡"
+
+---
+
+## checkin.answer
+回答打卡问题。
+
+**参数**：
+- `answer`: string — 用户的回答
+
+---
+
+## checkin.skip
+跳过当前打卡问题。
+
+**参数**：无
+
+---
+
+## checkin.cancel
+取消打卡。
+
+**参数**：无
+
+---
+
+## todo.add
+添加待办事项。
+
+**参数**：
+- `task`: string — 待办内容
+- `due_date`: string (可选) — 截止日期，格式 YYYY-MM-DD
+- `remind_time`: string (可选) — 提醒时间，格式 HH:MM
+
+---
+
+## todo.done
+完成待办事项。
+
+**参数**：
+- `task`: string — 待办内容（模糊匹配）
+
+---
+
+## todo.list
+列出所有待办。
+
+**参数**：无
+
+---
+
+## classify.archive
+将消息归档到专题文件夹。
+
+**参数**：
+- `category`: string — 分类：work / emotion / fun / misc
+- `content`: string — 归档内容
+
+---
+
+## daily.generate
+生成今日日报。
+
+**参数**：无
+
+**触发条件**：system action 或用户主动要求
+
+---
+
+## book.create / book.excerpt / book.thought / book.summary / book.quotes
+读书笔记系列。
+
+**参数**（以 book.create 为例）：
+- `title`: string — 书名
+- `author`: string (可选) — 作者
+
+---
+
+## media.create / media.thought
+影视笔记系列。
+
+**参数**（以 media.create 为例）：
+- `title`: string — 片名
+- `type`: string — movie / tv / anime / documentary
+
+---
+
+## mood.generate
+自动生成情绪日记（system action）。
+
+**参数**：无
+
+---
+
+## weekly.review
+生成周回顾（system action）。
+
+**参数**：无
+
+---
+
+## habit.propose / habit.nudge / habit.status / habit.complete
+习惯干预系列。
+
+**参数**（以 habit.propose 为例）：
+- `habit`: string — 习惯描述
+- `trigger`: string — 触发条件
+- `duration_days`: int — 实验天数（默认 7）
+
+---
+
+## decision.record / decision.review / decision.list
+决策复盘系列。
+
+**参数**（以 decision.record 为例）：
+- `topic`: string — 决策主题
+- `decision`: string — 做出的决定
+- `emotion`: string — 当时的情绪
+- `review_days`: int — 几天后复盘（默认 3）
+
+---
+
+## voice.journal
+语音日记（长语音 ASR 后自动整理）。
+
+**参数**：
+- `text`: string — ASR 转写文本
+- `date`: string — 日期
+
+---
+
+## deep.dive
+主题深潜（跨时间线搜索+分析）。
+
+**参数**：
+- `topic`: string — 话题
+- `keywords`: list[string] — 关键词
+- `save`: bool — 是否保存报告（默认 false）
+
+---
+
+## internal.read / internal.search / internal.list
+Agent Loop 内部工具（LLM 自主调用，用户不直接触发）。
+
+---
+
+## ignore
+不执行任何 skill 操作，LLM 生成自然闲聊回复。
+
+**触发条件**：闲聊、问候、表达情绪等不需要具体操作的消息
