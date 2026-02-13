@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  karvis:
+    build: .
+    container_name: karvis
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      # 持久化笔记数据（Lite 模式）
+      - karvis_data:/app/data
+    env_file:
+      - cloud_function/.env
+    environment:
+      - PROCESS_ENDPOINT_URL=http://127.0.0.1:9000/process
+
+volumes:
+  karvis_data:

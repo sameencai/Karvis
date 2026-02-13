@@ -1,5 +1,9 @@
 # 环境变量（含密钥）
 .env
+cloud_function/.env
+
+# Lite 模式本地数据
+cloud_function/data/
 
 # Python
 __pycache__/

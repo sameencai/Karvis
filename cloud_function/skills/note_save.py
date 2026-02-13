@@ -6,7 +6,7 @@ Skill: note.save
 """
 import sys
 from config import QUICK_NOTES_FILE
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO
 
 
 def _log(msg):

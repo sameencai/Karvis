@@ -4,6 +4,16 @@ Karvis 消息网关
 职责：接收企微消息 → 下载媒体/ASR → 构造 payload → 交给 brain.process()
 不做任何业务判断，所有逻辑由大脑决定。
 """
+# 加载 .env 文件（Lite 模式 / 本地开发）
+import os
+_env_file = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(_env_file):
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env_file)
+    except ImportError:
+        pass  # 未安装 python-dotenv 时跳过
+
 from flask import Flask, request
 import json
 import time
@@ -23,12 +33,11 @@ from config import (
     DEFAULT_USER_ID, STATE_FILE,
     WEATHER_API_KEY, WEATHER_CITY
 )
-import os
 
 # 异步处理端点的公网 URL（SCF 部署后填入，用于企微 5 秒超时的异步转发）
 PROCESS_ENDPOINT_URL = os.environ.get("PROCESS_ENDPOINT_URL", "http://127.0.0.1:9000/process")
 from wework_crypto import WXBizMsgCrypt
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO  # 统一存储接口（OneDrive 或 Lite 本地模式）
 import brain
 
 app = Flask(__name__)
@@ -1246,5 +1255,110 @@ def _build_weather_context():
     return {}
 
 
+# ============ 内置定时调度器（Lite 模式 / 本地运行） ============
+
+def _setup_builtin_scheduler():
+    """
+    当检测到本地运行模式时，自动启动内置定时调度器。
+    替代独立部署的 scheduler/ Event 函数，无需额外配置。
+    SCF 部署时不会触发（通过 SCF_RUNTIME 环境变量判断）。
+    """
+    # SCF 环境不启动内置调度器（SCF 有自己的定时触发器）
+    if os.environ.get("SCF_RUNTIME") or os.environ.get("TENCENTCLOUD_RUNENV"):
+        _log("[Scheduler] 检测到 SCF 环境，跳过内置调度器")
+        return
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+    except ImportError:
+        _log("[Scheduler] 未安装 apscheduler，跳过内置调度器。如需定时任务请: pip install apscheduler")
+        return
+
+    scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+
+    def _fire_system_action(action):
+        """通过 HTTP 调用自身的 /system 端点"""
+        try:
+            url = f"http://127.0.0.1:9000/system"
+            resp = requests.post(url, json={"action": action}, timeout=120)
+            _log(f"[Scheduler] {action} -> {resp.status_code}")
+        except Exception as e:
+            _log(f"[Scheduler] {action} 失败: {e}")
+
+    # 定时任务表（与 scheduler/serverless.yml 保持一致）
+    jobs = [
+        ("refresh_cache",   CronTrigger(minute="*/30")),
+        ("morning_report",  CronTrigger(hour=8, minute=0)),
+        ("evening_checkin", CronTrigger(hour=21, minute=0)),
+        ("todo_remind",     CronTrigger(hour="9,14,18", minute=0)),
+        ("daily_report",    CronTrigger(hour=22, minute=30)),
+        ("mood_generate",   CronTrigger(hour=22, minute=0)),
+        ("weekly_review",   CronTrigger(day_of_week="sun", hour=21, minute=30)),
+        ("nudge_check",     CronTrigger(hour=14, minute=0)),
+        ("companion_check", CronTrigger(hour="8,10,12,14,16,18,20,22", minute=0)),
+        ("monthly_review",  CronTrigger(day="last", hour=22, minute=0)),
+    ]
+
+    for action, trigger in jobs:
+        scheduler.add_job(_fire_system_action, trigger, args=[action], id=action,
+                          max_instances=1, misfire_grace_time=300)
+
+    scheduler.start()
+    _log(f"[Scheduler] 内置调度器已启动，共 {len(jobs)} 个定时任务")
+
+
+# ============ Lite 模式初始化 ============
+
+def _init_lite_data():
+    """Lite 模式首次启动时，创建必要的本地数据目录和默认文件"""
+    from storage import STORAGE_MODE
+    if STORAGE_MODE != "local":
+        return
+
+    from local_io import LOCAL_DATA_DIR
+    from config import (
+        INBOX_PATH, QUICK_NOTES_FILE, STATE_FILE, TODO_FILE,
+        KARVIS_BASE, SOUL_FILE, SKILLS_FILE, RULES_FILE, MEMORY_FILE
+    )
+
+    _log(f"[Lite] 初始化本地数据目录: {LOCAL_DATA_DIR}")
+
+    # 创建必要目录
+    dirs_to_create = [
+        INBOX_PATH, f"{INBOX_PATH}/attachments",
+        KARVIS_BASE, f"{KARVIS_BASE}/prompts", f"{KARVIS_BASE}/memory", f"{KARVIS_BASE}/logs",
+    ]
+    from local_io import LocalFileIO
+    for d in dirs_to_create:
+        local_path = LocalFileIO._resolve_path(d)
+        os.makedirs(local_path, exist_ok=True)
+
+    # 创建默认文件（不覆盖已有）
+    defaults = {
+        QUICK_NOTES_FILE: "# Quick Notes\n\n快速笔记，从微信同步。\n\n---\n\n",
+        TODO_FILE: "# Todo\n\n- [ ] 示例待办：试试发消息给 Karvis\n",
+        MEMORY_FILE: "# Karvis 记忆\n\n## 重要的人\n\n## 关键偏好\n\n## 生活节奏\n",
+        SOUL_FILE: (
+            "# Karvis\n\n"
+            "你是 Karvis，一个生活在微信里的 AI 助手。\n"
+            "你的职责是帮助用户记录生活、管理待办、复盘每日。\n"
+            "说话简洁温暖，像一个贴心的朋友。\n"
+        ),
+        SKILLS_FILE: "# Skills\n\n请参考 prompts/SKILLS.md.example 自定义你的技能清单。\n",
+        RULES_FILE: "# Rules\n\n请参考 prompts/RULES.md.example 自定义你的规则。\n",
+    }
+
+    for file_path, default_content in defaults.items():
+        local_path = LocalFileIO._resolve_path(file_path)
+        if not os.path.exists(local_path):
+            LocalFileIO.write_text(file_path, default_content)
+            _log(f"[Lite] 创建默认文件: {file_path}")
+
+    _log("[Lite] 数据目录初始化完成")
+
+
 if __name__ == '__main__':
+    _init_lite_data()
+    _setup_builtin_scheduler()
     app.run(host='0.0.0.0', port=9000, threaded=True)

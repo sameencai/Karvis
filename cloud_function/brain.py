@@ -15,7 +15,7 @@ from config import (
     QWEN_API_KEY, QWEN_BASE_URL, QWEN_MODEL,
     STATE_FILE, CHECKIN_TIMEOUT_SECONDS, DECISION_LOG_FILE
 )
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO  # 统一存储接口
 from memory import (
     load_soul, load_skills, load_rules, load_memory,
     format_recent_messages, add_message_to_state, apply_memory_updates,

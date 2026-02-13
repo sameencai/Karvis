@@ -4,3 +4,5 @@ pycryptodome
 cryptography
 tencentcloud-sdk-python-asr
 beautifulsoup4
+apscheduler
+python-dotenv

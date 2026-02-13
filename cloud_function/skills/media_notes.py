@@ -6,7 +6,7 @@ Skill: media.*
 import sys
 from datetime import datetime, timezone, timedelta
 from config import MEDIA_NOTES_DIR
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 MEDIA_LIST_FILE = f"{MEDIA_NOTES_DIR}/_片单.md"

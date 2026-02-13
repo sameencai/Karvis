@@ -8,7 +8,7 @@ import sys
 import re
 from datetime import datetime, timezone, timedelta
 from config import TODO_FILE, STATE_FILE
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 

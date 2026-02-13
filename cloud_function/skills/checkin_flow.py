@@ -14,7 +14,7 @@ import re
 import sys
 from datetime import datetime, timezone, timedelta
 from config import DAILY_NOTES_DIR
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO
 
 
 def _log(msg):

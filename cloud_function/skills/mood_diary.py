@@ -18,7 +18,7 @@ from config import (
     WORK_NOTES_DIR, FUN_NOTES_DIR, MISC_FILE,
     DAILY_NOTES_DIR, DECISION_LOG_FILE
 )
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 

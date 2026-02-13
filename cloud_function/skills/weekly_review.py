@@ -20,7 +20,7 @@ from config import (
     EMOTION_NOTES_DIR, WORK_NOTES_DIR, FUN_NOTES_DIR,
     MISC_FILE, DECISION_LOG_FILE
 )
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 

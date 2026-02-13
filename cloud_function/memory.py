@@ -15,7 +15,7 @@ from config import (
     STATE_FILE, RECENT_MESSAGES_LIMIT, PROMPT_CACHE_TTL,
     STATE_CACHE_TTL
 )
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO  # 统一存储接口
 import json as _json
 
 def _log(msg):

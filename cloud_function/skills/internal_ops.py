@@ -32,7 +32,7 @@ def read_files(params, state):
         max_chars: int — 每个文件最大返回字符数（默认 1000）
     """
     from config import OBSIDIAN_BASE
-    from onedrive_io import OneDriveIO
+    from storage import IO as OneDriveIO
     from concurrent.futures import ThreadPoolExecutor
 
     paths = params.get("paths", [])
@@ -98,7 +98,7 @@ def search_files(params, state):
         QUICK_NOTES_FILE, MISC_FILE,
         EMOTION_NOTES_DIR, WORK_NOTES_DIR, FUN_NOTES_DIR
     )
-    from onedrive_io import OneDriveIO
+    from storage import IO as OneDriveIO
     from concurrent.futures import ThreadPoolExecutor
 
     keywords = params.get("keywords", [])
@@ -174,7 +174,7 @@ def list_files(params, state):
         directory: str — 目录路径（相对于 OBSIDIAN_BASE）
     """
     from config import OBSIDIAN_BASE
-    from onedrive_io import OneDriveIO
+    from storage import IO as OneDriveIO
 
     directory = params.get("directory", "")
     if not directory:

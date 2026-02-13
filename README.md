@@ -1,5 +1,5 @@
 # Karvis
-
+Karvis 是一款部署在腾讯云 SCF 架构上的个人智能助理系统，其核心逻辑通过三层模型路由实现性能与成本的最佳平衡。该系统深度整合企业微信作为交互入口，并利用 OneDrive 实现与 Obsidian 笔记库的无缝同步，确保用户数据的私有化与可移植性。其功能涵盖碎片化信息自动归档、多轮打卡复盘、待办决策追踪以及基于长短期记忆的主动陪伴，展现了极高的自动化程度。
 运行在企业微信上的个人 AI 生活助手。后端 DeepSeek LLM + Qwen Flash 多模型架构，数据存储在你自己的 Obsidian Vault（OneDrive 同步）。
 
 ## 它能做什么
@@ -42,73 +42,95 @@
     └── 缓存刷新
 ```
 
-## 快速开始
+## 快速开始（10 分钟上手）
+
+Karvis 支持两种运行模式：
+
+| 模式 | 数据存储 | 需要配置 | 适合 |
+|---|---|---|---|
+| **Lite 模式**（推荐新手） | 本地文件 `data/` | DeepSeek Key + 企微 | 快速体验，10 分钟部署 |
+| **完整模式** | OneDrive → Obsidian | 上面 + Azure AD + OneDrive | 数据永久同步 |
+
+### 方式一：一键脚本安装（推荐）
+
+```bash
+git clone https://github.com/sameencai/Karvis.git
+cd Karvis
+./setup.sh
+```
+
+脚本会自动：检查 Python → 安装依赖 → 引导填写配置 → 生成 .env → 启动服务
+
+### 方式二：Docker 部署
+
+```bash
+git clone https://github.com/sameencai/Karvis.git
+cd Karvis
+cp .env.example cloud_function/.env
+# 编辑 cloud_function/.env，填入 DeepSeek Key + 企微配置
+docker-compose up -d
+```
+
+### 方式三：手动安装
+
+```bash
+git clone https://github.com/sameencai/Karvis.git
+cd Karvis/cloud_function
+pip install -r requirements.txt
+cp ../.env.example .env
+# 编辑 .env，填写配置
+python app.py
+```
+
+### 启动后你需要做的
+
+1. **内网穿透**：本地运行需要公网 URL 给企微回调
+
+   ```bash
+   # 推荐 ngrok（免费）
+   ngrok http 9000
+   # 或者 frp / Cloudflare Tunnel
+   ```
+
+2. **配置企微回调**：企微管理后台 → 应用 → 接收消息 → API 接收 → 填入 `https://your-url/wework`
+
+3. **发条消息试试**：在企微中给 Karvis 应用发一条消息
+
+> **关于 Lite 模式**：不配置 OneDrive 时自动启用，笔记保存在 `cloud_function/data/` 目录。内置定时调度器自动运行，无需单独部署 scheduler。随时可以配置 OneDrive 无缝切换到完整模式。
 
 ### 前置条件
 
-- Python 3.9+
-- [企业微信](https://work.weixin.qq.com/) 自建应用
-- [OneDrive](https://www.microsoft.com/microsoft-365/onedrive/online-cloud-storage) + Microsoft Graph API 应用注册
-- [DeepSeek](https://platform.deepseek.com/) API Key
-- [阿里云百炼](https://bailian.console.aliyun.com/)（Qwen Flash API，可选但推荐）
-- [腾讯云](https://cloud.tencent.com/) 账号（ASR 语音识别 + SCF 云函数部署）
+只需两样东西：
 
-### 1. 克隆项目
+1. **[DeepSeek](https://platform.deepseek.com/) API Key**（注册即送额度，日常约 0.5-2 元/天）
+2. **[企业微信](https://work.weixin.qq.com/) 自建应用**（个人也可注册，免费）
 
-```bash
-git clone https://github.com/your-username/karvis.git
-cd karvis
-```
-
-### 2. 配置环境变量
-
-```bash
-cp .env.example .env
-# 编辑 .env，填入所有凭证
-```
-
-### 3. 安装依赖
-
-```bash
-cd cloud_function
-pip install -r requirements.txt
-```
-
-### 4. 准备 OneDrive Prompt 文件
-
-将 `prompts/` 目录下的 `.example` 文件复制并自定义：
-
-```bash
-# 在你的 OneDrive Vault 中创建以下结构：
-# {OBSIDIAN_BASE}/_Karvis/prompts/SOUL.md   ← 基于 SOUL.md.example
-# {OBSIDIAN_BASE}/_Karvis/prompts/SKILLS.md ← 基于 SKILLS.md.example
-# {OBSIDIAN_BASE}/_Karvis/prompts/RULES.md  ← 基于 RULES.md.example
-# {OBSIDIAN_BASE}/_Karvis/memory/memory.md  ← 空文件或写入初始记忆
-```
-
-### 5. 本地运行
-
-```bash
-cd cloud_function
-python app.py
-# 监听 http://localhost:9000
-```
-
-### 6. 部署到腾讯云 SCF
-
-1. 在腾讯云 SCF 控制台创建 **Web 函数**（Python 3.9）
-2. 上传 `cloud_function/` 目录
-3. 在环境变量面板配置 `.env` 中的所有变量
-4. 配置企业微信应用的回调 URL 指向 SCF 的 `/wework` 路径
-5. 设置 `PROCESS_ENDPOINT_URL` 为 SCF 的公网 URL + `/process`
-
-### 7. 配置定时任务
-
-创建独立的 Event 函数（参考 [Karvis-scheduler](docs/项目概览.md#定时任务)），或使用任何定时任务服务 POST 到 `/system` 端点。
+可选：
+- [阿里云百炼](https://bailian.console.aliyun.com/) Qwen API（主动陪伴功能，留空则降级到 DeepSeek）
+- [腾讯云 ASR](https://console.cloud.tencent.com/asr)（语音识别，留空则语音功能不可用）
+- [心知天气](https://www.seniverse.com/) API（晨报天气信息，留空则跳过）
+- OneDrive + Azure AD（数据同步到 Obsidian，配置较复杂，建议体验后再配）
 
 ---
 
 ## 详细配置指南
+
+> 以下内容面向想使用完整功能（OneDrive 同步、腾讯云部署）的用户。如果只是想先体验 Lite 模式，上面的「快速开始」就够了。
+
+### 部署到腾讯云 SCF（生产环境推荐）
+
+本地运行适合体验，但生产使用建议部署到腾讯云 SCF（免费额度足够个人使用）：
+
+1. 在 [腾讯云 SCF 控制台](https://console.cloud.tencent.com/scf) 创建 **Web 函数**（Python 3.9，128-256MB 内存，180s 超时）
+2. 上传 `cloud_function/` 目录下所有文件
+3. 在函数配置 → 环境变量中填入 `.env` 中的所有变量
+4. 部署后获得公网 URL，填入 `PROCESS_ENDPOINT_URL` 环境变量
+5. 配置企微回调 URL 指向 SCF 的 `/wework` 路径
+6. 另外创建 **Event 函数**（上传 `scheduler/` 目录），配置定时触发器
+
+> **费用提示**：SCF 免费额度 = 每月 40 万 GBs + 100 万次调用，个人使用远远够。
+
+---
 
 ### 企业微信（WeChat Work）
 
@@ -297,12 +319,17 @@ WEATHER_CITY=北京                       # 你所在的城市
 
 ```
 karvis/
+├── setup.sh                  # 一键安装脚本
+├── Dockerfile                # Docker 构建文件
+├── docker-compose.yml        # Docker Compose 配置
 ├── cloud_function/           # 主函数代码
-│   ├── app.py                # Flask 网关（消息接收/ASR/链接解析/陪伴检查）
+│   ├── app.py                # Flask 网关（消息接收/ASR/链接解析/陪伴检查/内置调度器）
 │   ├── brain.py              # 核心大脑：多模型路由 → LLM → Skill 分发
 │   ├── memory.py             # 记忆管理：缓存 + 压缩 + CRUD
 │   ├── config.py             # 统一配置（环境变量）
+│   ├── storage.py            # 统一存储接口（自动选择 OneDrive / 本地）
 │   ├── onedrive_io.py        # OneDrive Graph API 读写
+│   ├── local_io.py           # 本地文件读写（Lite 模式）
 │   ├── skill_loader.py       # Skill 热加载器
 │   ├── wework_crypto.py      # 企微消息加解密
 │   ├── requirements.txt
@@ -323,7 +350,7 @@ karvis/
 │       ├── voice_journal.py
 │       ├── deep_dive.py
 │       └── internal_ops.py
-├── scheduler/                # 定时调度器（独立 SCF Event 函数）
+├── scheduler/                # 定时调度器（SCF Event 函数，Lite 模式不需要）
 ├── prompts/                  # Prompt 模板
 │   ├── SOUL.md.example
 │   ├── SKILLS.md.example
@@ -401,7 +428,7 @@ Karvis 的大部分行为由三个 Prompt 文件控制：
 
 - `brain.py` — 核心路由引擎，改错了整个系统瘫痪
 - `memory.py` — 记忆管理，改错了可能丢数据
-- `onedrive_io.py` — 存储层，改错了文件读写全挂
+- `storage.py` / `onedrive_io.py` / `local_io.py` — 存储层，改错了文件读写全挂
 
 如果非要改，先让 AI 解释现有代码，确认理解后再动手。改完后用 `docs/测试指南.md` 中的测试用例验证。
 

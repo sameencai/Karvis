@@ -6,7 +6,7 @@ Skill: book.*
 import sys
 from datetime import datetime, timezone, timedelta
 from config import BOOK_NOTES_DIR
-from onedrive_io import OneDriveIO
+from storage import IO as OneDriveIO
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 BOOK_LIST_FILE = f"{BOOK_NOTES_DIR}/_书单.md"

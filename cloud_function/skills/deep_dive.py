@@ -76,7 +76,7 @@ def _collect_data(keywords, state):
         QUICK_NOTES_FILE, MISC_FILE, DECISION_LOG_FILE,
         EMOTION_NOTES_DIR, WORK_NOTES_DIR, FUN_NOTES_DIR
     )
-    from onedrive_io import OneDriveIO
+    from storage import IO as OneDriveIO
 
     # 获取线程池
     try:
@@ -313,7 +313,7 @@ def _generate_report(topic, keywords, raw_data, state):
 def _save_report(topic, report):
     """将报告保存到文件"""
     from config import OBSIDIAN_BASE
-    from onedrive_io import OneDriveIO
+    from storage import IO as OneDriveIO
 
     now = datetime.now(BEIJING_TZ)
     date_str = now.strftime("%Y-%m-%d")

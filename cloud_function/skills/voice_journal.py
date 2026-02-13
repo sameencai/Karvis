@@ -214,7 +214,7 @@ def _build_journal_content(date_str, time_period, asr_text, analysis, attachment
 def _write_journal_file(date_str, content):
     """写入语音日记文件，自动处理序号"""
     from config import OBSIDIAN_BASE
-    from onedrive_io import OneDriveIO
+    from storage import IO as OneDriveIO
 
     base_dir = f"{OBSIDIAN_BASE}/02-Notes/语音日记"
 
