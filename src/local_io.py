@@ -13,8 +13,9 @@ def _log(msg):
     print(msg, file=sys.stderr, flush=True)
 
 
-# 本地存储根目录（默认 ./data，可通过环境变量覆盖）
-LOCAL_DATA_DIR = os.environ.get("KARVIS_LOCAL_DATA", os.path.join(os.path.dirname(__file__), "data"))
+# 本地存储根目录（默认项目根目录下的 my_life/，可通过环境变量覆盖）
+_project_root = os.path.dirname(os.path.dirname(__file__))
+LOCAL_DATA_DIR = os.environ.get("KARVIS_LOCAL_DATA", os.path.join(_project_root, "my_life"))
 
 
 class LocalFileIO:

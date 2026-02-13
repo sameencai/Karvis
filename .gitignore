@@ -1,9 +1,9 @@
 # 环境变量（含密钥）
 .env
-cloud_function/.env
+src/.env
 
-# Lite 模式本地数据
-cloud_function/data/
+# 你的数字生活数据（私人内容，不上传）
+my_life/
 
 # Python
 __pycache__/
@@ -15,23 +15,23 @@ build/
 *.egg
 
 # 第三方依赖（SCF 部署时打包，不入库）
-cloud_function/bin/
-cloud_function/blinker*/
-cloud_function/certifi*/
-cloud_function/charset_normalizer*/
-cloud_function/click*/
-cloud_function/Crypto/
-cloud_function/flask*/
-cloud_function/idna*/
-cloud_function/itsdangerous*/
-cloud_function/jinja2*/
-cloud_function/markupsafe*/
-cloud_function/pycryptodome*/
-cloud_function/requests*/
-cloud_function/tencentcloud*/
-cloud_function/urllib3*/
-cloud_function/werkzeug*/
-cloud_function/*.dist-info/
+src/bin/
+src/blinker*/
+src/certifi*/
+src/charset_normalizer*/
+src/click*/
+src/Crypto/
+src/flask*/
+src/idna*/
+src/itsdangerous*/
+src/jinja2*/
+src/markupsafe*/
+src/pycryptodome*/
+src/requests*/
+src/tencentcloud*/
+src/urllib3*/
+src/werkzeug*/
+src/*.dist-info/
 
 # IDE
 .vscode/

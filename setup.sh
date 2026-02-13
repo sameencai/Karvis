@@ -22,7 +22,7 @@ echo -e "${CYAN}${BOLD}╚══════════════════
 echo ""
 
 # ============ Step 0: 检查 Python ============
-echo -e "${BOLD}[1/5] 检查 Python 环境...${NC}"
+echo -e "${BOLD}[1/6] 检查 Python 环境...${NC}"
 
 PYTHON_CMD=""
 if command -v python3 &>/dev/null; then
@@ -52,25 +52,26 @@ echo -e "  ${GREEN}✓ Python $PY_VERSION${NC}"
 
 # ============ Step 1: 安装依赖 ============
 echo ""
-echo -e "${BOLD}[2/5] 安装 Python 依赖...${NC}"
+echo -e "${BOLD}[2/6] 安装 Python 依赖...${NC}"
 
-cd "$(dirname "$0")/cloud_function"
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$PROJECT_ROOT/src"
 
 $PYTHON_CMD -m pip install -r requirements.txt -q 2>&1 | tail -1
 echo -e "  ${GREEN}✓ 依赖安装完成${NC}"
 
 # ============ Step 2: 配置环境变量 ============
 echo ""
-echo -e "${BOLD}[3/5] 配置环境变量${NC}"
+echo -e "${BOLD}[3/6] 配置环境变量${NC}"
 
 ENV_FILE=".env"
 
 if [ -f "$ENV_FILE" ]; then
-    echo -e "  ${YELLOW}已存在 .env 文件，跳过配置（如需修改请手动编辑）${NC}"
+    echo -e "  ${YELLOW}已存在 .env 文件，跳过配置（如需修改请手动编辑 src/.env）${NC}"
 else
     echo ""
     echo -e "${CYAN}接下来需要填写几个必要的配置。${NC}"
-    echo -e "${CYAN}不确定的项可以直接回车跳过，之后手动编辑 cloud_function/.env${NC}"
+    echo -e "${CYAN}不确定的项可以直接回车跳过，之后手动编辑 src/.env${NC}"
     echo ""
 
     # 必填项读取函数（不允许为空）
@@ -194,7 +195,7 @@ echo ""
 echo -e "${BOLD}[4/6] 检查存储模式...${NC}"
 
 if grep -q "ONEDRIVE_CLIENT_ID=$" "$ENV_FILE" 2>/dev/null || grep -q 'ONEDRIVE_CLIENT_ID=""' "$ENV_FILE" 2>/dev/null || ! grep -q "ONEDRIVE_CLIENT_ID" "$ENV_FILE" 2>/dev/null; then
-    echo -e "  ${CYAN}📁 Lite 模式: 笔记保存在本地 cloud_function/data/ 目录${NC}"
+    echo -e "  ${CYAN}📁 Lite 模式: 笔记保存在项目根目录 my_life/ 文件夹${NC}"
     echo -e "  ${YELLOW}   后续想同步到 Obsidian？配置 OneDrive 即可无缝切换${NC}"
 else
     echo -e "  ${GREEN}☁️  OneDrive 模式: 笔记自动同步到 Obsidian Vault${NC}"
@@ -233,7 +234,7 @@ else
     fi
 fi
 
-# ============ Step 5: 启动提示 ============
+# ============ Step 5: 安装完成 ============
 echo ""
 echo -e "${BOLD}[6/6] 安装完成!${NC}"
 
@@ -255,8 +256,6 @@ echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}${BOLD}║              安装成功!                       ║${NC}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
-echo ""
-echo -e "  ${BOLD}详细教程见 README.md${NC}"
 echo ""
 
 # 询问是否立即启动
@@ -283,16 +282,14 @@ if [[ "$START_NOW" == "y" || "$START_NOW" == "Y" ]]; then
         echo -e "${GREEN}启动内网穿透 (cloudflared)...${NC}"
         echo -e "${CYAN}等待生成公网 URL...${NC}"
         echo ""
-        # cloudflared 输出 URL 到 stderr
         cloudflared tunnel --url http://localhost:9000 2>&1 &
         TUNNEL_PID=$!
         
-        # 等待 URL 出现（cloudflared 需要几秒请求隧道）
+        # 等待 URL 出现
         echo -e "  ${YELLOW}等待隧道建立...${NC}"
         TUNNEL_URL=""
         for i in $(seq 1 20); do
             sleep 1
-            # 尝试从 cloudflared 的 metrics 端口获取 URL
             TUNNEL_URL=$(curl -s http://127.0.0.1:20241/metrics 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | head -1)
             if [ -n "$TUNNEL_URL" ]; then
                 break
@@ -321,7 +318,6 @@ if [[ "$START_NOW" == "y" || "$START_NOW" == "Y" ]]; then
         echo ""
         echo -e "  按 Ctrl+C 停止所有服务"
 
-        # 等待用户中断
         trap "kill $KARVIS_PID $TUNNEL_PID 2>/dev/null; exit 0" INT TERM
         wait $KARVIS_PID
 

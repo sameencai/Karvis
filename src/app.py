@@ -1335,18 +1335,29 @@ def _init_lite_data():
         os.makedirs(local_path, exist_ok=True)
 
     # 创建默认文件（不覆盖已有）
+    # 尝试从 prompts_example/ 复制完整模板
+    _example_dir = os.path.join(os.path.dirname(__file__), "prompts_example")
+
+    def _read_example(filename):
+        """读取 prompts_example/ 下的模板文件"""
+        path = os.path.join(_example_dir, filename)
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        return None
+
     defaults = {
         QUICK_NOTES_FILE: "# Quick Notes\n\n快速笔记，从微信同步。\n\n---\n\n",
         TODO_FILE: "# Todo\n\n- [ ] 示例待办：试试发消息给 Karvis\n",
         MEMORY_FILE: "# Karvis 记忆\n\n## 重要的人\n\n## 关键偏好\n\n## 生活节奏\n",
-        SOUL_FILE: (
+        SOUL_FILE: _read_example("SOUL.md.example") or (
             "# Karvis\n\n"
             "你是 Karvis，一个生活在微信里的 AI 助手。\n"
             "你的职责是帮助用户记录生活、管理待办、复盘每日。\n"
             "说话简洁温暖，像一个贴心的朋友。\n"
         ),
-        SKILLS_FILE: "# Skills\n\n请参考 prompts/SKILLS.md.example 自定义你的技能清单。\n",
-        RULES_FILE: "# Rules\n\n请参考 prompts/RULES.md.example 自定义你的规则。\n",
+        SKILLS_FILE: _read_example("SKILLS.md.example") or "# Skills\n\n技能清单。\n",
+        RULES_FILE: _read_example("RULES.md.example") or "# Rules\n\n决策规则。\n",
     }
 
     for file_path, default_content in defaults.items():
