@@ -118,7 +118,7 @@ else
     echo ""
     echo -e "${BOLD}── 企业微信 (必填) ──${NC}"
     echo -e "  管理后台: ${CYAN}https://work.weixin.qq.com/wework_admin/frame${NC}"
-    echo -e "  ${YELLOW}⚠ 重要: 应用的「企业可信IP」必须留空，否则消息发不出去${NC}"
+    echo -e "  ${YELLOW}⚠ 重要: 应用的「企业可信IP」需填入你的公网 IP（终端运行 curl ifconfig.me 获取）${NC}"
     WEWORK_CORP_ID=$(read_required "  企业 ID (Corp ID): ")
     WEWORK_SECRET=$(read_required "  应用 Secret: ")
     read -p "  应用 Agent ID [默认 1000003]: " WEWORK_AGENT_ID
@@ -236,6 +236,21 @@ fi
 # ============ Step 5: 启动提示 ============
 echo ""
 echo -e "${BOLD}[6/6] 安装完成!${NC}"
+
+# 获取公网 IP 并提醒配置白名单
+echo ""
+echo -e "  ${BOLD}正在获取你的公网 IP...${NC}"
+PUBLIC_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 ipinfo.io/ip 2>/dev/null)
+if [ -n "$PUBLIC_IP" ]; then
+    echo -e "  ${GREEN}✓ 你的公网 IP: ${BOLD}${PUBLIC_IP}${NC}"
+    echo ""
+    echo -e "  ${YELLOW}${BOLD}⚠ 请确认已在企微后台配置企业可信 IP:${NC}"
+    echo -e "  ${YELLOW}  应用详情 → 企业可信IP → 填入: ${BOLD}${PUBLIC_IP}${NC}"
+    echo -e "  ${YELLOW}  （不配会导致 Karvis 无法发送消息）${NC}"
+else
+    echo -e "  ${YELLOW}无法获取公网 IP，请手动运行 curl ifconfig.me 并配置到企微后台${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}${BOLD}║              安装成功!                       ║${NC}"

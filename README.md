@@ -71,7 +71,10 @@ Karvis 支持两种运行模式，新用户推荐 **Lite 模式**，只需 DeepS
 5. 配置「接收消息」：应用详情 → 接收消息 → 设置 API 接收
    - URL 先空着（等下一步拿到公网地址再填）
    - **Token** 和 **EncodingAESKey**：点随机生成，**复制保存好**
-6. 配置「企业可信IP」：应用详情页 → 企业可信IP → **留空不填**（否则 cloudflared 的出口 IP 会被拦截，导致消息发不出去）
+6. 配置「企业可信IP」：应用详情页 → 企业可信IP → 填入你的**公网出口 IP**
+   - 在终端运行 `curl ifconfig.me` 获取你的公网 IP
+   - 把这个 IP 填入企业可信IP中（如 `112.24.112.171`）
+   - 如果换了网络环境（如切了 WiFi），需要更新此 IP
 
 > 到这里你应该有 6 个值：DeepSeek API Key、企业 ID、Agent ID、Secret、Token、EncodingAESKey
 
