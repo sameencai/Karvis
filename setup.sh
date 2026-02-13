@@ -159,7 +159,7 @@ fi
 
 # ============ Step 3: 检查存储模式 ============
 echo ""
-echo -e "${BOLD}[4/5] 检查存储模式...${NC}"
+echo -e "${BOLD}[4/6] 检查存储模式...${NC}"
 
 if grep -q "ONEDRIVE_CLIENT_ID=$" "$ENV_FILE" 2>/dev/null || grep -q 'ONEDRIVE_CLIENT_ID=""' "$ENV_FILE" 2>/dev/null || ! grep -q "ONEDRIVE_CLIENT_ID" "$ENV_FILE" 2>/dev/null; then
     echo -e "  ${CYAN}📁 Lite 模式: 笔记保存在本地 cloud_function/data/ 目录${NC}"
@@ -168,25 +168,46 @@ else
     echo -e "  ${GREEN}☁️  OneDrive 模式: 笔记自动同步到 Obsidian Vault${NC}"
 fi
 
-# ============ Step 4: 启动提示 ============
+# ============ Step 4: 安装内网穿透工具 ============
 echo ""
-echo -e "${BOLD}[5/5] 安装完成!${NC}"
+echo -e "${BOLD}[5/6] 检查内网穿透工具...${NC}"
+
+TUNNEL_CMD=""
+if command -v cloudflared &>/dev/null; then
+    TUNNEL_CMD="cloudflared"
+    echo -e "  ${GREEN}✓ cloudflared 已安装${NC}"
+elif command -v ngrok &>/dev/null; then
+    TUNNEL_CMD="ngrok"
+    echo -e "  ${GREEN}✓ ngrok 已安装${NC}"
+else
+    echo -e "  ${YELLOW}未找到内网穿透工具，正在安装 cloudflared（免注册、免配置）...${NC}"
+    if command -v brew &>/dev/null; then
+        brew install cloudflared 2>&1 | tail -3
+        if command -v cloudflared &>/dev/null; then
+            TUNNEL_CMD="cloudflared"
+            echo -e "  ${GREEN}✓ cloudflared 安装成功${NC}"
+        fi
+    elif command -v apt-get &>/dev/null; then
+        sudo apt-get install -y cloudflared 2>&1 | tail -3
+        if command -v cloudflared &>/dev/null; then
+            TUNNEL_CMD="cloudflared"
+            echo -e "  ${GREEN}✓ cloudflared 安装成功${NC}"
+        fi
+    fi
+
+    if [ -z "$TUNNEL_CMD" ]; then
+        echo -e "  ${RED}自动安装失败，请手动安装: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/${NC}"
+        echo -e "  ${YELLOW}或安装 ngrok: brew install ngrok${NC}"
+    fi
+fi
+
+# ============ Step 5: 启动提示 ============
+echo ""
+echo -e "${BOLD}[6/6] 安装完成!${NC}"
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}${BOLD}║              安装成功!                       ║${NC}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
-echo ""
-echo -e "  启动 Karvis:"
-echo -e "    ${CYAN}cd cloud_function && $PYTHON_CMD app.py${NC}"
-echo ""
-echo -e "  启动后:"
-echo -e "    1. Karvis 监听 ${BOLD}http://localhost:9000${NC}"
-echo -e "    2. 定时任务自动运行（内置调度器）"
-echo -e "    3. 配置企微回调 URL 指向此地址"
-echo ""
-echo -e "  ${YELLOW}提示: 本地运行需要公网可访问的 URL 给企微回调${NC}"
-echo -e "  ${YELLOW}推荐使用 ngrok 或 frp 做内网穿透:${NC}"
-echo -e "    ${CYAN}ngrok http 9000${NC}"
 echo ""
 echo -e "  ${BOLD}详细教程见 README.md${NC}"
 echo ""
@@ -195,6 +216,81 @@ echo ""
 read -p "是否立即启动 Karvis? (y/N): " START_NOW
 if [[ "$START_NOW" == "y" || "$START_NOW" == "Y" ]]; then
     echo ""
-    echo -e "${GREEN}启动中...${NC}"
-    $PYTHON_CMD app.py
+
+    # 启动 Karvis
+    echo -e "${GREEN}启动 Karvis...${NC}"
+    $PYTHON_CMD app.py &
+    KARVIS_PID=$!
+    sleep 2
+
+    # 检查 Karvis 是否启动成功
+    if ! kill -0 $KARVIS_PID 2>/dev/null; then
+        echo -e "${RED}Karvis 启动失败，请检查日志${NC}"
+        exit 1
+    fi
+    echo -e "  ${GREEN}✓ Karvis 已启动 (PID: $KARVIS_PID)${NC}"
+
+    # 启动内网穿透
+    if [ "$TUNNEL_CMD" == "cloudflared" ]; then
+        echo ""
+        echo -e "${GREEN}启动内网穿透 (cloudflared)...${NC}"
+        echo -e "${CYAN}等待生成公网 URL...${NC}"
+        echo ""
+        # cloudflared 输出 URL 到 stderr
+        cloudflared tunnel --url http://localhost:9000 2>&1 &
+        TUNNEL_PID=$!
+        
+        # 等待 URL 出现（cloudflared 需要几秒请求隧道）
+        echo -e "  ${YELLOW}等待隧道建立...${NC}"
+        TUNNEL_URL=""
+        for i in $(seq 1 20); do
+            sleep 1
+            # 尝试从 cloudflared 的 metrics 端口获取 URL
+            TUNNEL_URL=$(curl -s http://127.0.0.1:20241/metrics 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | head -1)
+            if [ -n "$TUNNEL_URL" ]; then
+                break
+            fi
+        done
+
+        echo ""
+        if [ -n "$TUNNEL_URL" ]; then
+            echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${GREEN}${BOLD}║  公网 URL 已生成!                                            ║${NC}"
+            echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
+            echo ""
+            echo -e "  你的公网地址: ${CYAN}${BOLD}${TUNNEL_URL}${NC}"
+            echo ""
+            echo -e "  ${BOLD}去企微后台 → 应用 → 接收消息 → API 接收 → URL 填:${NC}"
+            echo -e "  ${CYAN}${BOLD}${TUNNEL_URL}/wework${NC}"
+            echo ""
+            echo -e "  填好后在企微里给应用发条消息试试!"
+        else
+            echo -e "${YELLOW}隧道正在建立中，请在上方日志中找到类似这样的 URL:${NC}"
+            echo -e "  ${CYAN}https://xxx-xxx-xxx.trycloudflare.com${NC}"
+            echo ""
+            echo -e "  去企微后台 → 应用 → 接收消息 → API 接收 → URL 填:"
+            echo -e "  ${CYAN}https://xxx-xxx-xxx.trycloudflare.com/wework${NC}"
+        fi
+        echo ""
+        echo -e "  按 Ctrl+C 停止所有服务"
+
+        # 等待用户中断
+        trap "kill $KARVIS_PID $TUNNEL_PID 2>/dev/null; exit 0" INT TERM
+        wait $KARVIS_PID
+
+    elif [ "$TUNNEL_CMD" == "ngrok" ]; then
+        echo ""
+        echo -e "${GREEN}启动内网穿透 (ngrok)...${NC}"
+        echo -e "${YELLOW}如果 ngrok 要求 authtoken，请访问 https://dashboard.ngrok.com/get-started/your-authtoken${NC}"
+        echo ""
+        ngrok http 9000 &
+        TUNNEL_PID=$!
+        trap "kill $KARVIS_PID $TUNNEL_PID 2>/dev/null; exit 0" INT TERM
+        wait $KARVIS_PID
+    else
+        echo ""
+        echo -e "${YELLOW}没有内网穿透工具，Karvis 仅在本地可用 (http://localhost:9000)${NC}"
+        echo -e "${YELLOW}请手动安装 cloudflared 后运行: cloudflared tunnel --url http://localhost:9000${NC}"
+        wait $KARVIS_PID
+    fi
 fi

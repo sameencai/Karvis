@@ -1,5 +1,6 @@
 # Karvis
-Karvis 是一款部署在腾讯云 SCF 架构上的个人智能助理系统，其核心逻辑通过三层模型路由实现性能与成本的最佳平衡。该系统深度整合企业微信作为交互入口，并利用 OneDrive 实现与 Obsidian 笔记库的无缝同步，确保用户数据的私有化与可移植性。其功能涵盖碎片化信息自动归档、多轮打卡复盘、待办决策追踪以及基于长短期记忆的主动陪伴，展现了极高的自动化程度。
+git clone → ./setup.sh → 填几个 Key → y 启动
+→ 自动获得公网 URL → 复制到企微后台 → 开始用
 运行在企业微信上的个人 AI 生活助手。后端 DeepSeek LLM + Qwen Flash 多模型架构，数据存储在你自己的 Obsidian Vault（OneDrive 同步）。
 
 ## 它能做什么
@@ -44,72 +45,128 @@ Karvis 是一款部署在腾讯云 SCF 架构上的个人智能助理系统，�
 
 ## 快速开始（10 分钟上手）
 
-Karvis 支持两种运行模式：
+Karvis 支持两种运行模式，新用户推荐 **Lite 模式**，只需 DeepSeek Key + 企微即可跑起来：
 
 | 模式 | 数据存储 | 需要配置 | 适合 |
 |---|---|---|---|
 | **Lite 模式**（推荐新手） | 本地文件 `data/` | DeepSeek Key + 企微 | 快速体验，10 分钟部署 |
-| **完整模式** | OneDrive → Obsidian | 上面 + Azure AD + OneDrive | 数据永久同步 |
+| **完整模式** | OneDrive → Obsidian | 上面 + Azure AD + OneDrive | 数据永久同步到 Obsidian |
 
-### 方式一：一键脚本安装（推荐）
+### Step 0：准备两样东西
+
+在动手之前，先准备好这两样：
+
+**① DeepSeek API Key**（2 分钟）
+
+1. 前往 [DeepSeek 开放平台](https://platform.deepseek.com/) 注册
+2. 创建 API Key，复制保存
+3. 充值（日常使用约 0.5-2 元/天）
+
+**② 企业微信自建应用**（5 分钟）
+
+1. 前往 [企业微信管理后台](https://work.weixin.qq.com/) 注册（个人也可以注册，选「个人」类型，微信扫码即可）
+2. 记下你的 **企业 ID**（Corp ID）：「我的企业」页面底部
+3. 创建自建应用：管理后台 → 应用管理 → 自建 → 创建应用
+4. 记下应用的 **AgentId**（详情页顶部）和 **Secret**（详情页 → 查看）
+5. 配置「接收消息」：应用详情 → 接收消息 → 设置 API 接收
+   - URL 先空着（等下一步拿到公网地址再填）
+   - **Token** 和 **EncodingAESKey**：点随机生成，**复制保存好**
+
+> 到这里你应该有 6 个值：DeepSeek API Key、企业 ID、Agent ID、Secret、Token、EncodingAESKey
+
+### Step 1：克隆项目 & 一键安装
 
 ```bash
 git clone https://github.com/sameencai/Karvis.git
 cd Karvis
+chmod +x setup.sh
 ./setup.sh
 ```
 
-脚本会自动：检查 Python → 安装依赖 → 引导填写配置 → 生成 .env → 启动服务
+脚本会引导你完成：
+- ✅ 检查 Python 环境
+- ✅ 安装依赖
+- ✅ 交互式填写配置（把 Step 0 准备好的值粘贴进去）
+- ✅ 自动安装内网穿透工具 (cloudflared)
+- ✅ 启动 Karvis + 生成公网 URL
 
-### 方式二：Docker 部署
+> **Tips**：OneDrive 相关配置直接回车跳过即可，Lite 模式不需要。
+
+### Step 2：配置企微回调
+
+脚本启动成功后，会显示一个公网 URL，类似：
+
+```
+https://example-words-here.trycloudflare.com
+```
+
+回到企微管理后台 → 你的应用 → 接收消息 → API 接收：
+- **URL** 填：`https://你的公网地址/wework`（注意末尾加 `/wework`）
+- Token 和 EncodingAESKey 就是 Step 0 中生成的那两个
+- 点击保存（企微会发验证请求，Karvis 会自动通过）
+
+### Step 3：发条消息试试！
+
+打开企业微信 → 找到你创建的 Karvis 应用 → 发一条消息，比如「你好」。
+
+如果一切正常，Karvis 会回复你 🎉
+
+### 其他安装方式
+
+<details>
+<summary>Docker 部署</summary>
 
 ```bash
 git clone https://github.com/sameencai/Karvis.git
 cd Karvis
 cp .env.example cloud_function/.env
-# 编辑 cloud_function/.env，填入 DeepSeek Key + 企微配置
+# 编辑 cloud_function/.env，填入 Step 0 准备好的配置
 docker-compose up -d
 ```
 
-### 方式三：手动安装
+Docker 启动后还需要自行配置内网穿透（见下方说明）。
+
+</details>
+
+<details>
+<summary>手动安装</summary>
 
 ```bash
 git clone https://github.com/sameencai/Karvis.git
 cd Karvis/cloud_function
 pip install -r requirements.txt
 cp ../.env.example .env
-# 编辑 .env，填写配置
+# 编辑 .env，填入 Step 0 准备好的配置
 python app.py
 ```
 
-### 启动后你需要做的
+手动启动后还需要自行运行内网穿透：
 
-1. **内网穿透**：本地运行需要公网 URL 给企微回调
+```bash
+# 推荐 cloudflared（免注册、免配置）
+cloudflared tunnel --url http://localhost:9000
 
-   ```bash
-   # 推荐 ngrok（免费）
-   ngrok http 9000
-   # 或者 frp / Cloudflare Tunnel
-   ```
+# 或者 ngrok / frp 等其他工具
+```
 
-2. **配置企微回调**：企微管理后台 → 应用 → 接收消息 → API 接收 → 填入 `https://your-url/wework`
-
-3. **发条消息试试**：在企微中给 Karvis 应用发一条消息
+</details>
 
 > **关于 Lite 模式**：不配置 OneDrive 时自动启用，笔记保存在 `cloud_function/data/` 目录。内置定时调度器自动运行，无需单独部署 scheduler。随时可以配置 OneDrive 无缝切换到完整模式。
+>
+> **关于本地运行**：Lite 模式需要电脑保持开机和网络连接。想要 24/7 稳定运行？参考下方「部署到腾讯云 SCF」章节。
 
-### 前置条件
+### 前置条件汇总
 
-只需两样东西：
+**必须**：
+1. **Python 3.9+**（macOS/Linux 通常自带，`python3 --version` 检查）
+2. **[DeepSeek](https://platform.deepseek.com/) API Key**（注册即送额度）
+3. **[企业微信](https://work.weixin.qq.com/) 自建应用**（个人也可注册，免费）
 
-1. **[DeepSeek](https://platform.deepseek.com/) API Key**（注册即送额度，日常约 0.5-2 元/天）
-2. **[企业微信](https://work.weixin.qq.com/) 自建应用**（个人也可注册，免费）
-
-可选：
-- [阿里云百炼](https://bailian.console.aliyun.com/) Qwen API（主动陪伴功能，留空则降级到 DeepSeek）
-- [腾讯云 ASR](https://console.cloud.tencent.com/asr)（语音识别，留空则语音功能不可用）
-- [心知天气](https://www.seniverse.com/) API（晨报天气信息，留空则跳过）
-- OneDrive + Azure AD（数据同步到 Obsidian，配置较复杂，建议体验后再配）
+**可选**（增强功能，先跳过也没关系）：
+- [阿里云百炼](https://bailian.console.aliyun.com/) Qwen API — 主动陪伴功能，留空则降级到 DeepSeek
+- [腾讯云 ASR](https://console.cloud.tencent.com/asr) — 语音识别，留空则语音功能不可用
+- [心知天气](https://www.seniverse.com/) API — 晨报天气信息，留空则跳过
+- OneDrive + Azure AD — 数据同步到 Obsidian，建议体验 Lite 模式后再配
 
 ---
 
