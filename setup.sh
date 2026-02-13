@@ -77,11 +77,14 @@ else
     read_required() {
         local prompt="$1"
         local value=""
-        while [ -z "$value" ]; do
+        while true; do
             read -p "$prompt" value
-            if [ -z "$value" ]; then
-                echo -e "  ${RED}此项为必填，不能为空${NC}"
+            # 去除首尾空格
+            value=$(echo "$value" | xargs)
+            if [ -n "$value" ]; then
+                break
             fi
+            echo -e "  ${RED}此项为必填，不能为空${NC}" >&2
         done
         echo "$value"
     }
