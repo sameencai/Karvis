@@ -73,31 +73,39 @@ else
     echo -e "${CYAN}不确定的项可以直接回车跳过，之后手动编辑 cloud_function/.env${NC}"
     echo ""
 
+    # 必填项读取函数（不允许为空）
+    read_required() {
+        local prompt="$1"
+        local value=""
+        while [ -z "$value" ]; do
+            read -p "$prompt" value
+            if [ -z "$value" ]; then
+                echo -e "  ${RED}此项为必填，不能为空${NC}"
+            fi
+        done
+        echo "$value"
+    }
+
     # DeepSeek
     echo -e "${BOLD}── DeepSeek API (必填) ──${NC}"
     echo -e "  注册地址: ${CYAN}https://platform.deepseek.com/${NC}"
-    read -p "  DeepSeek API Key: " DEEPSEEK_KEY
-    DEEPSEEK_KEY=${DEEPSEEK_KEY:-"sk-your-deepseek-api-key"}
+    DEEPSEEK_KEY=$(read_required "  DeepSeek API Key: ")
 
     # 企微
     echo ""
     echo -e "${BOLD}── 企业微信 (必填) ──${NC}"
     echo -e "  管理后台: ${CYAN}https://work.weixin.qq.com/wework_admin/frame${NC}"
-    read -p "  企业 ID (Corp ID): " WEWORK_CORP_ID
-    WEWORK_CORP_ID=${WEWORK_CORP_ID:-"your-corp-id"}
-    read -p "  应用 Secret: " WEWORK_SECRET
-    WEWORK_SECRET=${WEWORK_SECRET:-"your-corp-secret"}
-    read -p "  应用 Agent ID: " WEWORK_AGENT_ID
+    WEWORK_CORP_ID=$(read_required "  企业 ID (Corp ID): ")
+    WEWORK_SECRET=$(read_required "  应用 Secret: ")
+    read -p "  应用 Agent ID [默认 1000003]: " WEWORK_AGENT_ID
     WEWORK_AGENT_ID=${WEWORK_AGENT_ID:-"1000003"}
-    read -p "  回调 Token: " WEWORK_TOKEN
-    WEWORK_TOKEN=${WEWORK_TOKEN:-"your-callback-token"}
-    read -p "  EncodingAESKey: " WEWORK_AES
-    WEWORK_AES=${WEWORK_AES:-"your-encoding-aes-key"}
+    WEWORK_TOKEN=$(read_required "  回调 Token: ")
+    WEWORK_AES=$(read_required "  EncodingAESKey: ")
 
     # 用户 ID
     echo ""
     echo -e "${BOLD}── 用户配置 ──${NC}"
-    read -p "  你的企微用户 ID (定时推送目标): " USER_ID
+    read -p "  你的企微用户 ID (定时推送目标，可回车跳过): " USER_ID
     USER_ID=${USER_ID:-"YourWeWorkUserID"}
 
     # OneDrive (可选)
