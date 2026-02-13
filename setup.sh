@@ -88,7 +88,27 @@ else
 
     # DeepSeek
     echo -e "${BOLD}── DeepSeek API (必填) ──${NC}"
-    echo -e "  注册地址: ${CYAN}https://platform.deepseek.com/${NC}"
+    echo -e "  ${CYAN}[1] DeepSeek 官方  https://platform.deepseek.com/${NC}"
+    echo -e "  ${CYAN}[2] 腾讯云 lkeap   https://console.cloud.tencent.com/lkeap${NC}"
+    echo -e "  ${CYAN}[3] 其他兼容平台（手动输入 Base URL）${NC}"
+    read -p "  选择 API 来源 [1/2/3，默认 1]: " DS_SOURCE
+    DS_SOURCE=${DS_SOURCE:-"1"}
+
+    case "$DS_SOURCE" in
+        2)
+            DEEPSEEK_BASE_URL="https://api.lkeap.cloud.tencent.com/v1"
+            echo -e "  ${GREEN}✓ 使用腾讯云 lkeap${NC}"
+            ;;
+        3)
+            read -p "  请输入 Base URL: " DEEPSEEK_BASE_URL
+            DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-"https://api.deepseek.com/v1"}
+            ;;
+        *)
+            DEEPSEEK_BASE_URL="https://api.deepseek.com/v1"
+            echo -e "  ${GREEN}✓ 使用 DeepSeek 官方${NC}"
+            ;;
+    esac
+
     DEEPSEEK_KEY=$(read_required "  DeepSeek API Key: ")
 
     # 企微
@@ -127,7 +147,7 @@ else
 
 # --- DeepSeek API ---
 DEEPSEEK_API_KEY=${DEEPSEEK_KEY}
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
 DEEPSEEK_MODEL=deepseek-v3.2
 
 # --- Qwen Flash API（可选，留空则降级到 DeepSeek） ---
