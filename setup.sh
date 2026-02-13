@@ -118,6 +118,7 @@ else
     echo ""
     echo -e "${BOLD}── 企业微信 (必填) ──${NC}"
     echo -e "  管理后台: ${CYAN}https://work.weixin.qq.com/wework_admin/frame${NC}"
+    echo -e "  ${YELLOW}⚠ 重要: 应用的「企业可信IP」必须留空，否则消息发不出去${NC}"
     WEWORK_CORP_ID=$(read_required "  企业 ID (Corp ID): ")
     WEWORK_SECRET=$(read_required "  应用 Secret: ")
     read -p "  应用 Agent ID [默认 1000003]: " WEWORK_AGENT_ID
