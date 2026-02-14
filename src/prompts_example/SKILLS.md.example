@@ -76,7 +76,10 @@
 
 **参数**：
 - `category`: string — 分类：work / emotion / fun / misc
+- `title`: string — 简短标题（10字以内）
 - `content`: string — 归档内容
+- `attachment`: string (可选) — 附件路径
+- `merge`: bool (可选) — 为 true 时将内容合并到最近一条同类归档条目，而非新建条目。当用户紧接着上一条消息（尤其是图片/语音/视频）发送补充说明时使用。
 
 ---
 

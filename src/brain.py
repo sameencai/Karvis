@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL,
-    QWEN_API_KEY, QWEN_BASE_URL, QWEN_MODEL,
+    QWEN_API_KEY, QWEN_BASE_URL, QWEN_MODEL, QWEN_VL_MODEL,
     STATE_FILE, CHECKIN_TIMEOUT_SECONDS, DECISION_LOG_FILE
 )
 from storage import IO as OneDriveIO  # 统一存储接口
@@ -168,6 +168,68 @@ def _call_qwen_flash(messages, max_tokens=500, temperature=0.3):
 
     _log(f"[Brain][Flash] Qwen API 错误: {resp.status_code} - {resp.text[:200]}")
     raise RuntimeError(f"Qwen API {resp.status_code}")
+
+
+def _call_qwen_vl(image_base64, prompt="请详细描述这张图片的内容。"):
+    """
+    调用千问 VL（视觉语言模型）理解图片内容。
+    
+    Args:
+        image_base64: 图片的 base64 编码字符串
+        prompt: 图片理解的提示语
+    Returns:
+        str: 图片描述文本，失败返回 None
+    """
+    url = f"{QWEN_BASE_URL}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {QWEN_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": QWEN_VL_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_base64}"
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 500
+    }
+
+    _log(f"[Brain][VL] Qwen VL请求: model={QWEN_VL_MODEL}, "
+         f"image_size={len(image_base64)//1024}KB, prompt={prompt[:50]}")
+
+    t0 = _time.time()
+    try:
+        resp = requests.post(url, headers=headers, json=data, timeout=60)
+        t1 = _time.time()
+
+        if resp.status_code == 200:
+            result = resp.json()
+            usage = result.get("usage", {})
+            description = result["choices"][0]["message"]["content"]
+            _log(f"[Brain][VL] Qwen VL响应: {t1-t0:.1f}s, "
+                 f"prompt_tokens={usage.get('prompt_tokens')}, "
+                 f"completion_tokens={usage.get('completion_tokens')}, "
+                 f"desc={description[:80]}")
+            return description
+
+        _log(f"[Brain][VL] Qwen VL API 错误: {resp.status_code} - {resp.text[:200]}")
+        return None
+    except Exception as e:
+        _log(f"[Brain][VL] Qwen VL 调用异常: {e}")
+        return None
 
 
 # 向后兼容：保留 call_deepseek 别名
@@ -349,6 +411,18 @@ def process(payload, send_fn=None):
     }
 
     # 2. 先提取 user_text（不依赖 state 和 prompt，CPU 操作）
+    #    图片消息：如果带有 base64 数据，先调 VL 模型获取描述
+    if payload.get("type") == "image" and payload.get("image_base64"):
+        _log("[Brain] 检测到图片，调用千问 VL 进行图像理解...")
+        vl_desc = _call_qwen_vl(payload["image_base64"])
+        if vl_desc:
+            payload["image_description"] = vl_desc
+            _log(f"[Brain] 图像理解完成: {vl_desc[:100]}")
+        else:
+            _log("[Brain] 图像理解失败，降级为普通图片处理")
+        # 释放 base64 数据，节省内存
+        del payload["image_base64"]
+
     user_text = _extract_user_text(payload)
 
     # 等 state 结果（可能命中 /tmp 缓存，<1ms）
@@ -689,7 +763,9 @@ def _extract_user_text(payload):
     elif msg_type == "voice":
         return f"[语音] {payload.get('text', '')}"
     elif msg_type == "image":
-        return "[图片]"
+        # 如果有图片描述，记录到短期记忆
+        desc = payload.get("image_description", "")
+        return f"[图片] {desc}" if desc else "[图片]"
     elif msg_type == "video":
         return "[视频]"
     elif msg_type == "link":
@@ -722,10 +798,15 @@ def _build_user_message(payload):
         }, ensure_ascii=False)
 
     elif msg_type == "image":
-        return json.dumps({
+        data = {
             "type": "image",
             "attachment": payload.get("attachment", "")
-        }, ensure_ascii=False)
+        }
+        # 图片理解：如果有 VL 描述，传给 LLM
+        image_desc = payload.get("image_description", "")
+        if image_desc:
+            data["image_description"] = image_desc
+        return json.dumps(data, ensure_ascii=False)
 
     elif msg_type == "video":
         return json.dumps({

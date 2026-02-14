@@ -392,6 +392,8 @@ def build_payload(msg):
             return None, "图片上传失败"
         payload["type"] = "image"
         payload["attachment"] = attachment
+        # 将图片 base64 传给 brain，用于千问 VL 图像理解
+        payload["image_base64"] = base64.b64encode(data).decode("utf-8")
         return payload, None
 
     elif msg_type == 'voice':

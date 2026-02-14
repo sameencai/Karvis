@@ -16,6 +16,9 @@ QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "")
 QWEN_BASE_URL = os.environ.get("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 QWEN_MODEL = os.environ.get("QWEN_MODEL", "qwen-flash")
 
+# ============ Qwen VL (视觉理解) ============
+QWEN_VL_MODEL = os.environ.get("QWEN_VL_MODEL", "qwen-vl-max")  # 复用 QWEN_API_KEY 和 QWEN_BASE_URL
+
 # ============ OneDrive ============
 ONEDRIVE_CLIENT_ID = os.environ.get("ONEDRIVE_CLIENT_ID", "")
 ONEDRIVE_CLIENT_SECRET = os.environ.get("ONEDRIVE_CLIENT_SECRET", "")
