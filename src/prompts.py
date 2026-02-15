@@ -65,10 +65,6 @@ SKILLS = """# 可用 Skill（参数均为 JSON）
 - **internal.read** `{paths, max_chars?}` — [Agent Loop 专用] 读取指定文件内容（paths 为相对 OBSIDIAN_BASE 的路径数组，最多5个）
 - **internal.search** `{keywords, scope?, max_results?}` — [Agent Loop 专用] 在笔记中搜索关键词（scope: quick_notes|archives|all）
 - **internal.list** `{directory}` — [Agent Loop 专用] 列出指定目录下的文件列表
-- **finance.query** `{query_type, time_range?, start_date?, end_date?, category?, limit?}` — 收支查询（query_type: expense|income|balance|detail；time_range: this_month|last_month|this_week|this_year|last_year|custom）
-- **finance.snapshot** `{query_type, category?, channel?}` — 资产快照查询（query_type: summary|compare|by_category|by_channel|trend）
-- **finance.import** `{}` — 扫描 inbox 目录，导入 iCost xlsx 文件到财务数据（用户说「导入 iCost」「更新账单数据」时触发）
-- **finance.monthly** `{month?}` — 生成财务月报（month 格式 YYYY-MM；用户说「这个月/本月」→ 传当月如 "2026-02"；说「上个月」或不指定月份 → 不传 month；说「再生成一遍」→ 沿用上次的 month 参数）
 - **ignore** `{reason?}` — 不处理"""
 
 RULES = """# 决策规则
@@ -300,22 +296,6 @@ skill 选 `none`，直接在 reply 中输出。
 - **最终回答**：最后一轮 continue=false 时，reply 中直接给用户答案（基于之前搜集到的信息）
 - 不要为了简单问题启动 Agent Loop，只有确实需要查阅文件时才用
 
-## 财务查询（V5）
-- 用户问收支相关（"花了多少"、"收入多少"、"开销"、"消费"、"支出"、"结余"、"储蓄率"、"哪个分类花最多"） → finance.query
-  - 确定 query_type：问支出→expense；问收入→income；问收支/结余→balance；问明细→detail
-  - 确定 time_range：这个月→this_month；上个月→last_month；这周→this_week；今年→this_year；去年→last_year；指定日期→custom + start_date/end_date
-  - 如有分类关键词（"餐饮"、"房租"、"交通"等）→ category 参数
-- 用户问资产相关（"总资产"、"净资产"、"有多少钱"、"资产情况"、"资产变了多少"、"投资账户"、"负债"） → finance.snapshot
-  - 问总资产/净资产/概况 → query_type=summary
-  - 问变化/对比/增减 → query_type=compare
-  - 问某类资产（"投资理财"、"流动资金"） → query_type=by_category + category
-  - 问某渠道（"招商银行"、"富途"） → query_type=by_channel + channel
-  - 问趋势/历史变化 → query_type=trend
-- 用户说「导入 iCost」「导入记账数据」「更新账单」「同步 iCost」等 → finance.import（无需参数）
-- 用户说「生成财务月报」「上个月财务报告」等 → finance.monthly（不带 month，默认上个月）
-- 用户说「这个月的」「本月」「当月」→ finance.monthly（必须带当月 month 如 "2026-02"）
-- 用户说「再生成一遍」「重新生成」→ finance.monthly（必须带上次生成的 month 参数，从对话上文推断）
-
 ## 闲聊与日常互动
 - 用户的任何消息都值得回应，即使不需要执行技能
 - skill=ignore 时，reply 必须是自然、有温度的回应，而不是空或机械的"收到"
@@ -518,65 +498,6 @@ MONTHLY_JSON_FORMAT = """
 - 语气温暖真诚，像月末和老朋友的深度复盘"""
 
 # ============================================================
-# finance.monthly — 财务月报
-# ============================================================
-
-FINANCE_REPORT_SYSTEM = """你是一位专业的个人财务分析师。基于用户的月度收支数据和资产快照，生成深度财务洞察。
-你的分析对象是一个关注储蓄率、消费结构合理性和长期财务目标的用户。
-
-## 你的分析风格
-- 像一个关心用户的理财顾问，而不是冷冰冰的报表
-- 数据必须精确引用，但解读要有温度
-- 好消息就开心说，坏消息要温柔但诚实
-- 不说教，给具体的、下个月就能执行的行动
-
-返回严格 JSON，不要 markdown 代码块标记。"""
-
-FINANCE_REPORT_USER = """根据以下财务数据，按五个维度深度分析。
-
-返回 JSON（不要 markdown 代码块标记）：
-{{
-  "cashflow": {{
-    "headline": "一句话收支判断",
-    "real_balance": "真实结余数字",
-    "real_savings_rate": "真实储蓄率",
-    "verdict": "surplus / breakeven / deficit",
-    "detail": "2-3句具体分析：收入结构（工资vs其他）、支出大头、环比变化、异常项"
-  }},
-  "spending_insight": {{
-    "top_concern": "本月最值得关注的支出分类及原因",
-    "pattern": "消费模式观察（如'月初集中消费'、'餐饮占比持续走高'等）",
-    "compare": "和上月的关键差异"
-  }},
-  "asset_health": {{
-    "headline": "一句话资产判断",
-    "goose_growth": "生钱资产（投资理财类）本月增减情况",
-    "rsu_risk": "RSU/股票集中度评估（如果资产数据中有的话）",
-    "diversification_score": "资产分散度评价：高度集中 / 适中 / 良好",
-    "detail": "1-2句具体分析"
-  }},
-  "fire_progress": {{
-    "annual_expense_estimate": "基于本月支出推算的年化支出",
-    "fire_target": "FIRE 目标金额（年化支出 × 25，4% 法则）",
-    "current_assets_toward_fire": "当前可用于 FIRE 的资产（生钱资产部分）",
-    "progress_pct": "FIRE 进度百分比",
-    "comment": "一句话点评进度，要有温度"
-  }},
-  "action_items": [
-    "下个月最重要的 1-2 个具体行动（不是'少花钱'这种废话，而是具体可执行的）"
-  ],
-  "summary": "2-3句总结，有温度有力量"
-}}
-
-规则：
-- 必须引用数据中的原始数字，不可编造
-- 如果某个维度缺少数据（如没有资产快照），该字段写 null 并在 detail 中说明
-- fire_progress 中如果资产数据不足，用已有数据估算并注明"粗估"
-- summary 是最重要的字段，要让用户看完有动力
-
-以下是本月财务数据："""
-
-# ============================================================
 # voice.* — 语音日记
 # ============================================================
 
@@ -685,7 +606,6 @@ VL_DEFAULT = "请详细描述这张图片的内容。"
 
 # 需要多段回复的长任务集合
 LONG_TASKS = frozenset({
-    "finance.monthly", "finance.import",
     "deep.dive",
     "weekly.review", "monthly.review",
     "book.summary", "book.quotes",
@@ -693,8 +613,6 @@ LONG_TASKS = frozenset({
 
 # 第一段确认消息模板（{param} 会被动态替换）
 CONFIRM_TEMPLATES = {
-    "finance.monthly": "📊 收到，正在生成{month}财务月报，稍等一下~",
-    "finance.import": "📥 正在扫描 inbox 并导入数据...",
     "deep.dive": "🔍 正在搜索全历史数据，深度分析中...",
     "weekly.review": "📅 正在回顾这周的数据，生成周报中...",
     "monthly.review": "📊 正在汇总本月数据，生成月度回顾...",
@@ -708,16 +626,6 @@ def get_confirm_message(skill_name, params=None):
     template = CONFIRM_TEMPLATES.get(skill_name)
     if not template:
         return None
-    if skill_name == "finance.monthly":
-        month = (params or {}).get("month", "")
-        if not month:
-            # 与 finance_report.execute 一致：默认上个月
-            from datetime import datetime, timezone, timedelta
-            now = datetime.now(timezone(timedelta(hours=8)))
-            first_this = now.replace(day=1)
-            last_month = first_this - timedelta(days=1)
-            month = last_month.strftime("%Y-%m")
-        return template.format(month=month)
     return template
 
 

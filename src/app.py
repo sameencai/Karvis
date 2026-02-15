@@ -772,17 +772,6 @@ def system_endpoint():
             return json.dumps({"ok": True, "action": "companion_check",
                                "sent": 1 if message else 0})
 
-        if action == "finance_monthly_report":
-            # V5: 财务月报
-            target_user = data.get("user_id", DEFAULT_USER_ID)
-            from skills.finance_report import execute as finance_report_execute
-            result = finance_report_execute(data, {})
-            reply = result.get("reply") if result else None
-            if reply:
-                send_wework_message(target_user, reply)
-            _log(f"[/system] finance_monthly_report 完成, reply={'有' if reply else '无'}")
-            return json.dumps({"ok": True, "action": "finance_monthly_report", "has_reply": bool(reply)})
-
         _log(f"[/system] 未知 action: {action}")
         return json.dumps({"ok": False, "error": f"unknown action: {action}"})
 
@@ -1300,7 +1289,6 @@ def _setup_builtin_scheduler():
         ("nudge_check",     CronTrigger(hour=14, minute=0)),
         ("companion_check", CronTrigger(hour="8,10,12,14,16,18,20,22", minute=0)),
         ("monthly_review",  CronTrigger(day="last", hour=22, minute=0)),
-        ("finance_monthly_report", CronTrigger(day=8, hour=20, minute=0)),
     ]
 
     for action, trigger in jobs:
@@ -1322,7 +1310,7 @@ def _init_lite_data():
     from local_io import LOCAL_DATA_DIR
     from config import (
         INBOX_PATH, QUICK_NOTES_FILE, STATE_FILE, TODO_FILE,
-        KARVIS_BASE, MEMORY_FILE, FINANCE_DIR, FINANCE_INBOX_DIR, FINANCE_REPORTS_DIR
+        KARVIS_BASE, MEMORY_FILE
     )
 
     _log(f"[Lite] 初始化本地数据目录: {LOCAL_DATA_DIR}")
@@ -1331,7 +1319,6 @@ def _init_lite_data():
     dirs_to_create = [
         INBOX_PATH, f"{INBOX_PATH}/attachments",
         KARVIS_BASE, f"{KARVIS_BASE}/memory", f"{KARVIS_BASE}/logs",
-        FINANCE_DIR, FINANCE_INBOX_DIR, FINANCE_REPORTS_DIR,
     ]
     from local_io import LocalFileIO
     for d in dirs_to_create:
