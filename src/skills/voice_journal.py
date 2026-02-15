@@ -104,23 +104,8 @@ def _analyze_voice(asr_text, state):
 
     context_str = "；".join(context_hints) if context_hints else "无特殊上下文"
 
-    prompt = f"""你是一个语音日记整理助手。用户发送了一段长语音，以下是 ASR 识别的文本。
-请分析并整理：
-
-ASR原文：
-{asr_text}
-
-用户上下文：{context_str}
-
-请输出 JSON（不要 markdown 代码块）：
-{{
-  "cleaned_text": "整理后的文本（分段，去掉口语重复/语气词，但保留原意和情感表达）",
-  "theme": "一句话主题",
-  "mood_trajectory": "情绪变化轨迹（如：焦虑 → 释然 → 平静）",
-  "key_events": ["关键事件1", "关键事件2"],
-  "people_mentioned": ["提到的人名"],
-  "insight": "一句话洞察（对用户有价值的发现）"
-}}"""
+    import prompts
+    prompt = prompts.get("VOICE_USER", asr_text=asr_text, context_str=context_str)
 
     url = f"{DEEPSEEK_BASE_URL}/chat/completions"
     headers = {
@@ -130,7 +115,7 @@ ASR原文：
     data = {
         "model": DEEPSEEK_MODEL,
         "messages": [
-            {"role": "system", "content": "你是语音日记分析助手。输出纯 JSON，不要 markdown 标记。"},
+            {"role": "system", "content": prompts.VOICE_SYSTEM},
             {"role": "user", "content": prompt}
         ],
         "max_tokens": 800,

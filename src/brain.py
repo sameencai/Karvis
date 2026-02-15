@@ -17,10 +17,11 @@ from config import (
 )
 from storage import IO as OneDriveIO  # 统一存储接口
 from memory import (
-    load_soul, load_skills, load_rules, load_memory,
+    load_memory,
     format_recent_messages, add_message_to_state, apply_memory_updates,
     read_state_cached, write_state_and_update_cache
 )
+import prompts
 
 # 复用线程池，减少线程创建开销
 _executor = ThreadPoolExecutor(max_workers=6)
@@ -170,7 +171,7 @@ def _call_qwen_flash(messages, max_tokens=500, temperature=0.3):
     raise RuntimeError(f"Qwen API {resp.status_code}")
 
 
-def _call_qwen_vl(image_base64, prompt="请详细描述这张图片的内容。"):
+def _call_qwen_vl(image_base64, prompt=None):
     """
     调用千问 VL（视觉语言模型）理解图片内容。
     
@@ -180,6 +181,8 @@ def _call_qwen_vl(image_base64, prompt="请详细描述这张图片的内容。"
     Returns:
         str: 图片描述文本，失败返回 None
     """
+    if prompt is None:
+        prompt = prompts.VL_DEFAULT
     url = f"{QWEN_BASE_URL}/chat/completions"
     headers = {
         "Authorization": f"Bearer {QWEN_API_KEY}",
@@ -242,30 +245,23 @@ def call_deepseek(messages, max_tokens=500, temperature=0.3):
 # ============ Prompt 组装 ============
 
 def build_system_prompt(state, prompt_futs=None):
-    """组装完整的 System Prompt（并发加载 prompt 文件）
+    """组装完整的 System Prompt（memory 从 OneDrive 加载，其余从 prompts 模块取）
     
-    prompt_futs: 可选，外部提前提交的 futures dict，用于与 state 读取并行
+    prompt_futs: 可选，外部提前提交的 {"mem": Future} dict，用于与 state 读取并行
     """
     beijing_tz = timezone(timedelta(hours=8))
     current_time = datetime.now(beijing_tz).strftime("%Y-%m-%d %H:%M %A")
 
-    # 如果外部已提交，直接用；否则自行并发加载
-    if prompt_futs is None:
-        prompt_futs = {
-            "soul": _executor.submit(load_soul),
-            "skills": _executor.submit(load_skills),
-            "rules": _executor.submit(load_rules),
-            "mem": _executor.submit(load_memory),
-        }
-    soul = prompt_futs["soul"].result()
-    skills = prompt_futs["skills"].result()
-    rules = prompt_futs["rules"].result()
-    mem = prompt_futs["mem"].result()
+    # memory 仍从 OneDrive 加载（唯一的网络 IO）
+    if prompt_futs and "mem" in prompt_futs:
+        mem = prompt_futs["mem"].result()
+    else:
+        mem = load_memory()
 
     recent = format_recent_messages(state)
     state_summary = _build_state_summary(state)
 
-    return f"""{soul}
+    return f"""{prompts.SOUL}
 
 ## 长期记忆
 {mem}
@@ -279,37 +275,11 @@ def build_system_prompt(state, prompt_futs=None):
 ## 当前时间
 {current_time}
 
-{skills}
+{prompts.SKILLS}
 
-{rules}
+{prompts.RULES}
 
-## 输出格式（严格 JSON，不要加 markdown 代码块标记，尽量简短）
-
-单步操作（大多数场景）：
-{{
-  "thinking": "一句话推理",
-  "skill": "skill.name",
-  "params": {{ }},
-  "reply": "简短回复",
-  "state_updates": {{ }},
-  "memory_updates": [],
-  "continue": false
-}}
-
-多步操作（用户一句话包含多个动作时，用 steps 替代 skill+params）：
-{{
-  "thinking": "一句话推理",
-  "steps": [
-    {{"skill": "todo.done", "params": {{"indices": "2-7"}}}},
-    {{"skill": "todo.add", "params": {{"content": "新任务"}}}}
-  ],
-  "reply": "简短回复",
-  "memory_updates": []
-}}
-
-什么时候用 steps：用户一句话提到多个独立操作时（如"帮我加三个待办"、"把2和5完成再加个新的"）。大多数情况用单步格式即可。
-
-continue 说明：仅在使用 internal.* skill（读取/搜索文件）时设为 true，表示还需要更多信息才能完成任务。普通 skill 始终为 false。"""
+{prompts.OUTPUT_FORMAT}"""
 
 
 def _build_state_summary(state):
@@ -416,12 +386,9 @@ def process(payload, send_fn=None):
     t_token = _time.time()
     _log(f"[Brain][耗时] token预热: {t_token - t_start:.1f}s")
 
-    # 1. 读取 state（优先 /tmp 缓存）和 prompt 文件（并发）
+    # 1. 读取 state（优先 /tmp 缓存）和 memory（并发）
     state_future = _executor.submit(read_state_cached)
     prompt_futs = {
-        "soul": _executor.submit(load_soul),
-        "skills": _executor.submit(load_skills),
-        "rules": _executor.submit(load_rules),
         "mem": _executor.submit(load_memory),
     }
 
@@ -724,18 +691,7 @@ def _run_agent_loop(system_prompt, user_message, first_decision, first_context, 
 
 # ============ 辅助函数 ============
 
-# ── V4: Flash 回复层 Prompt ──
-FLASH_REPLY_PROMPT = """你是 Karvis 的回复生成模块。根据以下信息生成给用户的最终回复。
-
-规则：
-1. 语气温暖自然，像好朋友聊天，简洁 1-3 句话
-2. 操作成功时用自然语言告知结果，不要机械列出技术细节
-3. 有数据需要展示时（如待办列表），按用户意图组织格式（要序号就加序号、要排序就排序）
-4. 操作失败时友好告知并建议怎么做，不说"技术错误"
-5. 多个操作时汇总结果，不逐个报告
-6. 不用"亲""宝"等过度亲昵称呼，可适度用 emoji
-7. 不要重复用户说过的话，直接给结果
-8. 直接输出回复文本，不要加任何前缀或 JSON 包装"""
+# ── V4: Flash 回复层 — prompt 从 prompts 模块取 ──
 
 # ── V4: 不需要 Flash 加工的简单 skill ──
 _SIMPLE_SKILLS = frozenset({
@@ -865,7 +821,7 @@ def _call_flash_for_reply(user_text, decision, steps, step_results):
 
     try:
         reply = call_llm([
-            {"role": "system", "content": FLASH_REPLY_PROMPT},
+            {"role": "system", "content": prompts.FLASH_REPLY},
             {"role": "user", "content": context}
         ], model_tier="flash", max_tokens=300, temperature=0.5)
         return reply

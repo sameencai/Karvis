@@ -247,41 +247,17 @@ def _generate_report(topic, keywords, raw_data, state):
 
     decision_text = "\n".join(raw_data.get("decision_entries", []))
 
-    prompt = f"""你是一个深度分析助手。用户想深入了解「{topic}」这个话题在自己生活中的变化。
-
-以下是从用户的笔记、日记、聊天记录中搜索到的相关内容（共 {raw_data['total_matches']} 条匹配，展示最近 {len(raw_data['matched_entries'])} 条）：
-
---- 匹配记录 ---
-{entries_text[:3000]}
-
---- 长期记忆中的相关信息 ---
-{memory_text[:500] if memory_text else "无"}
-
---- 近期情绪评分 ---
-{mood_text if mood_text else "无数据"}
-
---- 相关决策日志 ---
-{decision_text[:500] if decision_text else "无"}
-
-请生成一份深度分析报告，格式如下：
-
-📊 深潜报告：{topic}
-
-**时间线**：
-列出关键节点，格式：日期 💭 "原话/事件" — 情绪标签
-
-**趋势**：一句话描述整体变化方向
-
-**关键洞察**：2-3 个有价值的发现（不是泛泛而谈，要基于数据）
-
-**建议**：如果有的话，给出 1 个具体可行的建议
-
-注意：
-- 用第二人称"你"
-- 语气温暖但不煽情
-- 只基于数据说话，不要编造
-- 如果数据不足以得出结论，诚实说明
-- 保持简洁，不超过 500 字"""
+    import prompts
+    prompt = prompts.get(
+        "DEEP_DIVE_USER",
+        topic=topic,
+        total_matches=raw_data['total_matches'],
+        shown_count=len(raw_data['matched_entries']),
+        entries_text=entries_text[:3000],
+        memory_text=memory_text[:500] if memory_text else "无",
+        mood_text=mood_text if mood_text else "无数据",
+        decision_text=decision_text[:500] if decision_text else "无",
+    )
 
     url = f"{DEEPSEEK_BASE_URL}/chat/completions"
     headers = {
@@ -291,7 +267,7 @@ def _generate_report(topic, keywords, raw_data, state):
     data = {
         "model": DEEPSEEK_MODEL,
         "messages": [
-            {"role": "system", "content": "你是深度分析助手。直接输出分析报告文本，不要 JSON 格式。"},
+            {"role": "system", "content": prompts.DEEP_DIVE_SYSTEM},
             {"role": "user", "content": prompt}
         ],
         "max_tokens": 800,

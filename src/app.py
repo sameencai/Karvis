@@ -1089,17 +1089,16 @@ def _run_companion_check(user_id):
 
 def _build_companion_context(state, user_id):
     """
-    F2: 为陪伴消息收集丰富上下文（soul + memory + 速记 + 待办 + 近期对话）。
+    F2: 为陪伴消息收集丰富上下文（memory + 速记 + 待办 + 近期对话）。
     并发读取，控制总耗时。
     """
     from concurrent.futures import ThreadPoolExecutor
-    from config import SOUL_FILE, MEMORY_FILE, QUICK_NOTES_FILE, TODO_FILE
+    from config import MEMORY_FILE, QUICK_NOTES_FILE, TODO_FILE
 
     context = {}
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {
-            "soul": executor.submit(OneDriveIO.read_text, SOUL_FILE),
             "memory": executor.submit(OneDriveIO.read_text, MEMORY_FILE),
             "quick_notes": executor.submit(OneDriveIO.read_text, QUICK_NOTES_FILE),
             "todo": executor.submit(OneDriveIO.read_text, TODO_FILE),
@@ -1130,31 +1129,21 @@ def _generate_companion_message(signals, context, state):
     F2: 基于信号 + 上下文，调 Qwen Flash 生成自然的关怀消息。
     注入 soul + memory + 近期速记，让消息更有温度和个性。
     """
+    import prompts as _prompts
+
     # 组装 system prompt
     system_parts = []
 
-    # 1. Soul（人设）
-    soul = context.get("soul", "")
-    if soul:
-        system_parts.append(f"## 你的人设\n{soul}")
+    # 1. Soul（人设）— 从 prompts 模块取
+    system_parts.append(f"## 你的人设\n{_prompts.SOUL}")
 
     # 2. Memory（长期记忆）
     memory = context.get("memory", "")
     if memory:
         system_parts.append(f"## 你对用户的了解\n{memory}")
 
-    # 3. 任务指令
-    system_parts.append("""## 任务
-你正在做一次主动关怀检查。根据下面的「触发信号」和「近期上下文」，生成一条发给用户的关怀消息。
-
-要求：
-- 1-2 句话，简短自然
-- 符合你的人设
-- 待办提醒 → 简要提及具体内容，语气轻松不施压
-- 沉默关怀 → 结合近期速记中用户在做的事来聊，有话题感
-- 情绪跟进 → 关心但不追问，留空间
-- 不要 emoji，不要"我注意到"等机器人用语
-- 直接输出消息文本，不要任何 JSON 格式""")
+    # 3. 任务指令 — 从 prompts 模块取
+    system_parts.append(_prompts.COMPANION_TASK)
 
     system_prompt = '\n\n'.join(system_parts)
 
@@ -1321,15 +1310,15 @@ def _init_lite_data():
     from local_io import LOCAL_DATA_DIR
     from config import (
         INBOX_PATH, QUICK_NOTES_FILE, STATE_FILE, TODO_FILE,
-        KARVIS_BASE, SOUL_FILE, SKILLS_FILE, RULES_FILE, MEMORY_FILE
+        KARVIS_BASE, MEMORY_FILE
     )
 
     _log(f"[Lite] 初始化本地数据目录: {LOCAL_DATA_DIR}")
 
-    # 创建必要目录
+    # 创建必要目录（SOUL/SKILLS/RULES 已迁入 prompts.py，不再创建 prompts/ 目录）
     dirs_to_create = [
         INBOX_PATH, f"{INBOX_PATH}/attachments",
-        KARVIS_BASE, f"{KARVIS_BASE}/prompts", f"{KARVIS_BASE}/memory", f"{KARVIS_BASE}/logs",
+        KARVIS_BASE, f"{KARVIS_BASE}/memory", f"{KARVIS_BASE}/logs",
     ]
     from local_io import LocalFileIO
     for d in dirs_to_create:
@@ -1337,29 +1326,10 @@ def _init_lite_data():
         os.makedirs(local_path, exist_ok=True)
 
     # 创建默认文件（不覆盖已有）
-    # 尝试从 prompts_example/ 复制完整模板
-    _example_dir = os.path.join(os.path.dirname(__file__), "prompts_example")
-
-    def _read_example(filename):
-        """读取 prompts_example/ 下的模板文件"""
-        path = os.path.join(_example_dir, filename)
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                return f.read()
-        return None
-
     defaults = {
         QUICK_NOTES_FILE: "# Quick Notes\n\n快速笔记，从微信同步。\n\n---\n\n",
         TODO_FILE: "# Todo\n\n- [ ] 示例待办：试试发消息给 Karvis\n",
         MEMORY_FILE: "# Karvis 记忆\n\n## 重要的人\n\n## 关键偏好\n\n## 生活节奏\n",
-        SOUL_FILE: _read_example("SOUL.md.example") or (
-            "# Karvis\n\n"
-            "你是 Karvis，一个生活在微信里的 AI 助手。\n"
-            "你的职责是帮助用户记录生活、管理待办、复盘每日。\n"
-            "说话简洁温暖，像一个贴心的朋友。\n"
-        ),
-        SKILLS_FILE: _read_example("SKILLS.md.example") or "# Skills\n\n技能清单。\n",
-        RULES_FILE: _read_example("RULES.md.example") or "# Rules\n\n决策规则。\n",
     }
 
     for file_path, default_content in defaults.items():

@@ -54,11 +54,8 @@ EMOTION_NOTES_DIR = f"{OBSIDIAN_BASE}/02-Notes/情感日记"
 FUN_NOTES_DIR = f"{OBSIDIAN_BASE}/02-Notes/生活趣事"
 VOICE_JOURNAL_DIR = f"{OBSIDIAN_BASE}/02-Notes/语音日记"  # V3-F14
 
-# Karvis prompts & memory（OneDrive 上的路径）
+# Karvis memory（OneDrive 上的路径，SOUL/SKILLS/RULES 已迁入 prompts.py）
 KARVIS_BASE = f"{OBSIDIAN_BASE}/_Karvis"
-SOUL_FILE = f"{KARVIS_BASE}/prompts/SOUL.md"
-SKILLS_FILE = f"{KARVIS_BASE}/prompts/SKILLS.md"
-RULES_FILE = f"{KARVIS_BASE}/prompts/RULES.md"
 MEMORY_FILE = f"{KARVIS_BASE}/memory/memory.md"
 DECISION_LOG_FILE = f"{KARVIS_BASE}/logs/decisions.jsonl"
 

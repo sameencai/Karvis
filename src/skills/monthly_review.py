@@ -298,50 +298,13 @@ def _ai_analyze_month(data, period_str, month_str, dates, call_deepseek):
     if data["notes"]:
         parts.append(f"\n【本月记录】\n{data['notes']}")
 
-    parts.append(f"""
-返回 JSON（不要 markdown 代码块标记）：
-{{
-  "mood_calendar": [
-    {{"date": "MM-DD", "score": 7, "keyword": "2字情绪词"}}
-  ],
-  "mood_avg": 7.2,
-  "trends": [
-    "一句话描述一个月度趋势，如'情绪整体稳定偏积极'",
-    "另一个趋势"
-  ],
-  "highlights": [
-    {{"date": "MM-DD", "event": "简述高光时刻"}},
-    {{"date": "MM-DD", "event": "简述高光时刻"}}
-  ],
-  "lowpoints": [
-    {{"date": "MM-DD", "event": "简述低谷时刻"}}
-  ],
-  "people_changes": [
-    {{"name": "人名", "change": "简述关系变化轨迹"}}
-  ],
-  "stats": {{
-    "total_messages": 89,
-    "record_days": 22,
-    "categories": {{"fun": 35, "emotion": 25, "work": 20, "misc": 20}},
-    "keywords": ["关键词1", "关键词2"]
-  }},
-  "insight": "2-3句月度最核心的洞察，深刻而温暖",
-  "next_month_suggestions": ["下月建议1", "下月建议2"]
-}}
-
-规则：
-- mood_calendar 列出所有有评分的日期
-- trends 找 2-3 个月度大趋势（情绪、行为、人际）
-- highlights 和 lowpoints 各 2-4 个最突出的时刻
-- people_changes 列出关系有明显变化的人
-- insight 是整月最重要的一句话洞察，要有深度
-- categories 用百分比表示归档分布（估算即可）
-- 语气温暖真诚，像月末和老朋友的深度复盘""")
+    import prompts
+    parts.append(prompts.MONTHLY_JSON_FORMAT)
 
     prompt = "\n".join(parts)
 
     response = call_deepseek([
-        {"role": "system", "content": "你是一位有洞察力的成长教练。从用户一整月的记录中发现成长轨迹和行为模式，帮助他看见自己的变化。返回严格 JSON。"},
+        {"role": "system", "content": prompts.MONTHLY_SYSTEM},
         {"role": "user", "content": prompt}
     ], max_tokens=1500, temperature=0.7)
 

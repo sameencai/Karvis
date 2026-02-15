@@ -239,6 +239,8 @@ def _extract_checkin_data(daily_text):
 
 def _ai_analyze_mood(data, date_str, call_deepseek):
     """调用 AI 分析当天情绪"""
+    import prompts
+
     # 组装 prompt
     parts = [f"分析以下 {date_str} 的记录，提取情绪信息。"]
 
@@ -255,30 +257,12 @@ def _ai_analyze_mood(data, date_str, call_deepseek):
         for d in data["decisions"][:10]:
             parts.append(f"- {d.get('ts','')} skill={d.get('skill','')} thinking={d.get('thinking','')}")
 
-    parts.append(f"""
-返回 JSON（不要 markdown 代码块标记）：
-{{
-  "mood_score": 7,
-  "mood_label": "2-4字情绪标签，如'复杂但温暖'",
-  "mood_emoji": "🌤️",
-  "trend": "一句话描述今天情绪走势，如'早上平静→下午开心→晚上自责'",
-  "key_moments": [
-    {{"time": "08:06", "emoji": "💭", "event": "简述事件", "mood": "情绪词"}},
-    {{"time": "22:50", "emoji": "😓", "event": "简述事件", "mood": "情绪词"}}
-  ],
-  "insight": "1-2句温暖的洞察，像朋友一样"
-}}
-
-规则：
-- mood_score 1-10，基于消息内容综合判断
-- key_moments 最多 6 个，选情绪波动最明显的时刻
-- insight 要具体，不要泛泛而谈，可以关联不同事件
-- 语气温暖但不煽情""")
+    parts.append(prompts.MOOD_JSON_FORMAT)
 
     prompt = "\n".join(parts)
 
     response = call_deepseek([
-        {"role": "system", "content": "你是情绪分析助手。从用户一天的记录中提取情绪脉络，返回严格 JSON。"},
+        {"role": "system", "content": prompts.MOOD_SYSTEM},
         {"role": "user", "content": prompt}
     ], max_tokens=800, temperature=0.7)
 

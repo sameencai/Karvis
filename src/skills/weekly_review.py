@@ -225,6 +225,8 @@ def _extract_decision_stats(text, dates):
 
 def _ai_analyze_week(data, period_str, dates, call_deepseek):
     """调用 AI 分析周数据"""
+    import prompts
+
     parts = [f"分析以下 {period_str} 一周的记录，生成周回顾。"]
 
     # 情绪评分
@@ -246,39 +248,12 @@ def _ai_analyze_week(data, period_str, dates, call_deepseek):
         notes_text = data["notes"][:6000]
         parts.append(f"\n【本周记录】\n{notes_text}")
 
-    parts.append(f"""
-返回 JSON（不要 markdown 代码块标记）：
-{{
-  "mood_trend": [
-    {{"date": "MM-DD", "score": 7, "keyword": "2字情绪词"}}
-  ],
-  "mood_avg": 7.1,
-  "connections": [
-    {{"title": "3-6字标题", "detail": "2-3句分析，发现跨天的模式和关联"}},
-    {{"title": "标题2", "detail": "..."}}
-  ],
-  "stats": {{
-    "total_messages": 23,
-    "categories": {{"fun": 8, "emotion": 5, "work": 3, "misc": 4}},
-    "top_people": [{{"name": "人名", "count": 3}}],
-    "keywords": ["关键词1", "关键词2", "关键词3"]
-  }},
-  "insight": "1-2句本周最核心的洞察，像朋友一样",
-  "suggestions": ["下周建议1", "下周建议2", "下周建议3"]
-}}
-
-规则：
-- mood_trend 按日期排列，没有评分的日子用 null
-- connections 是本周最有价值的 2-4 个"碎片连线"——找出不同天/不同事件之间的隐藏关联
-- stats 统计消息数、分类分布、提及最多的人名、关键词
-- insight 要具体深刻，不要泛泛而谈
-- suggestions 要可执行，基于本周的模式给出
-- 语气温暖真诚，像老朋友的周末复盘""")
+    parts.append(prompts.WEEKLY_JSON_FORMAT)
 
     prompt = "\n".join(parts)
 
     response = call_deepseek([
-        {"role": "system", "content": "你是一位温暖的生活观察者。从用户一周的碎片记录中发现模式和关联，帮助他看见自己。返回严格 JSON。"},
+        {"role": "system", "content": prompts.WEEKLY_SYSTEM},
         {"role": "user", "content": prompt}
     ], max_tokens=1200, temperature=0.7)
 

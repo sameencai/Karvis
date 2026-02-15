@@ -188,21 +188,12 @@ def summary(params, state):
 
     from brain import call_deepseek
     import json
+    import prompts
 
-    prompt = f"""根据以下《{book}》的读书笔记（摘录和感想），生成读书总结。
-返回 JSON（不要 markdown 代码块标记）：
-{{
-  "core_ideas": "核心观点（3-5句）",
-  "thinking_path": "思考脉络（用户的思考方向和收获）",
-  "recommendations": "关联阅读建议（1-2本相关书）",
-  "one_liner": "一句话总结"
-}}
-
-笔记内容：
-{content[:3000]}"""
+    prompt = prompts.get("BOOK_SUMMARY_USER", book=book, content=content[:3000])
 
     response = call_deepseek([
-        {"role": "system", "content": "你是读书分析助手，擅长从读书笔记中提炼精华。"},
+        {"role": "system", "content": prompts.BOOK_SUMMARY_SYSTEM},
         {"role": "user", "content": prompt}
     ], max_tokens=800, temperature=0.7)
 
@@ -254,20 +245,12 @@ def quotes(params, state):
 
     from brain import call_deepseek
     import json
+    import prompts
 
-    prompt = f"""从以下《{book}》的读书笔记中，提炼 3-5 条适合分享（朋友圈/社交媒体）的金句。
-返回 JSON 数组（不要 markdown 代码块标记）：
-[
-  "金句1",
-  "金句2",
-  "金句3"
-]
-
-笔记内容：
-{content[:3000]}"""
+    prompt = prompts.get("BOOK_QUOTES_USER", book=book, content=content[:3000])
 
     response = call_deepseek([
-        {"role": "system", "content": "你是文案提炼专家，擅长从读书笔记中提炼适合分享的金句。"},
+        {"role": "system", "content": prompts.BOOK_QUOTES_SYSTEM},
         {"role": "user", "content": prompt}
     ], max_tokens=500, temperature=0.8)
 

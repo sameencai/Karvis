@@ -2,7 +2,7 @@
 """
 Karvis 记忆管理
 负责：
-  1. 读取 prompts/ 和 memory/ 文件（带缓存）
+  1. 读取 memory.md（带缓存）
   2. 管理对话滑动窗口（短期记忆）
   3. 更新长期记忆（memory.md）
 """
@@ -11,7 +11,7 @@ import sys
 import os
 import threading
 from config import (
-    SOUL_FILE, SKILLS_FILE, RULES_FILE, MEMORY_FILE,
+    MEMORY_FILE,
     STATE_FILE, RECENT_MESSAGES_LIMIT, PROMPT_CACHE_TTL,
     STATE_CACHE_TTL
 )
@@ -26,7 +26,7 @@ def _log(msg):
 _TMP_CACHE_DIR = "/tmp/karvis_prompts"
 
 class PromptCache:
-    """Prompt 文件缓存：内存 → /tmp 磁盘 → OneDrive（三级缓存）"""
+    """Memory 文件缓存：内存 → /tmp 磁盘 → OneDrive（三级缓存）"""
 
     def __init__(self):
         self._cache = {}  # 内存缓存 {file_path: {"content": str, "expire_time": float}}
@@ -96,21 +96,6 @@ class PromptCache:
 
 # 全局缓存实例
 _prompt_cache = PromptCache()
-
-
-def load_soul():
-    """加载 SOUL.md"""
-    return _prompt_cache.get(SOUL_FILE)
-
-
-def load_skills():
-    """加载 SKILLS.md"""
-    return _prompt_cache.get(SKILLS_FILE)
-
-
-def load_rules():
-    """加载 RULES.md"""
-    return _prompt_cache.get(RULES_FILE)
 
 
 def load_memory():

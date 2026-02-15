@@ -127,24 +127,11 @@ def _extract_date_entries(text, date_str):
 def _ai_analyze(notes, date_str, call_deepseek):
     """调用 AI 分析当天笔记"""
     import json
-
-    prompt = f"""分析以下 {date_str} 的笔记内容，返回 JSON（不要 markdown 代码块标记）：
-
-{{
-  "summary": "2-3句温暖的今日总结",
-  "mood": "一个 emoji 表示今日情绪",
-  "mood_score": 7,
-  "tags": ["标签1", "标签2", "标签3"],
-  "highlights": ["亮点1", "亮点2"],
-  "insights": "1-2句洞察或建议"
-}}
-
-笔记内容：
-{notes[:3000]}"""
+    import prompts
 
     response = call_deepseek([
-        {"role": "system", "content": "你是日记分析助手。用温暖、朋友般的语气分析笔记，返回严格 JSON。"},
-        {"role": "user", "content": prompt}
+        {"role": "system", "content": prompts.DAILY_SYSTEM},
+        {"role": "user", "content": prompts.get("DAILY_USER", date_str=date_str, notes=notes[:3000])}
     ], max_tokens=800, temperature=0.7)
 
     if not response:
