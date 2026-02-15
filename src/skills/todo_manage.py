@@ -146,13 +146,16 @@ def add(params, state):
 
 def complete(params, state):
     """
-    完成待办事项，模糊匹配关键词。
+    完成待办事项，支持关键词匹配和序号批量完成。
 
     params:
         keyword: str — 用于匹配待办的关键词
+        indices: str — 用序号完成，支持 "3" / "2-7" / "1,3,5"
     """
     keyword = (params.get("keyword") or "").strip().lower()
-    if not keyword:
+    indices_str = (params.get("indices") or "").strip()
+
+    if not keyword and not indices_str:
         return {"success": False, "reply": "请告诉我要完成哪个待办"}
 
     text = OneDriveIO.read_text(TODO_FILE)
@@ -161,48 +164,118 @@ def complete(params, state):
 
     doing, done = _parse_todo_md(text)
 
-    # 模糊匹配
-    matched = None
-    matched_idx = -1
-    for i, item in enumerate(doing):
-        if keyword in item["content"].lower():
-            matched = item
-            matched_idx = i
-            break
+    if indices_str:
+        # ── 序号模式：批量完成 ──
+        target_indices = _parse_indices(indices_str, len(doing))
+        if not target_indices:
+            return {"success": False, "reply": f"无法解析序号「{indices_str}」，或序号超出范围"}
 
-    if not matched:
-        return {"success": False, "reply": f"没找到包含「{keyword}」的待办"}
+        completed = []
+        for idx in sorted(target_indices, reverse=True):
+            if 0 <= idx < len(doing):
+                item = doing.pop(idx)
+                done_line = item["raw"].replace("- [ ]", "- [x]")
+                if f"`{_now_str()}`" not in done_line:
+                    done_line += f" ✅ `{_now_str()}`"
+                done.insert(0, {"raw": done_line, "content": item["content"], "date": _now_str()})
+                completed.append(item["content"])
 
-    # 移动到已完成
-    doing.pop(matched_idx)
-    done_line = matched["raw"].replace("- [ ]", "- [x]")
-    if f"`{_now_str()}`" not in done_line:
-        done_line += f" ✅ `{_now_str()}`"
-    done.insert(0, {"raw": done_line, "content": matched["content"], "date": _now_str()})
+        if not completed:
+            return {"success": False, "reply": "没有找到对应序号的待办"}
 
-    # 清理对应的 reminder
-    state_updates = {}
-    reminders = state.get("reminders", [])
-    new_reminders = [r for r in reminders if keyword not in r.get("content", "").lower()]
-    if len(new_reminders) != len(reminders):
-        state_updates["reminders"] = new_reminders
+        state_updates = _clean_reminders(state, completed)
+        new_text = _rebuild_todo_md(doing, done)
+        ok = OneDriveIO.write_text(TODO_FILE, new_text)
 
-    new_text = _rebuild_todo_md(doing, done)
-    ok = OneDriveIO.write_text(TODO_FILE, new_text)
-
-    if ok:
-        _log(f"[todo.done] 已完成: {matched['content']}")
-        result = {"success": True, "reply": f"已完成「{matched['content']}」✅"}
-        if state_updates:
-            result["state_updates"] = state_updates
-        return result
-    else:
+        if ok:
+            names = "、".join(f"「{c[:20]}」" for c in completed)
+            _log(f"[todo.done] 批量完成 {len(completed)} 条: {names}")
+            result = {"success": True, "reply": f"已完成 {len(completed)} 条待办 ✅\n{names}"}
+            if state_updates:
+                result["state_updates"] = state_updates
+            return result
         return {"success": False, "reply": "写入 Todo.md 失败"}
+
+    else:
+        # ── 关键词模式：单条匹配 ──
+        matched = None
+        matched_idx = -1
+        for i, item in enumerate(doing):
+            if keyword in item["content"].lower():
+                matched = item
+                matched_idx = i
+                break
+
+        if not matched:
+            return {"success": False, "reply": f"没找到包含「{keyword}」的待办"}
+
+        doing.pop(matched_idx)
+        done_line = matched["raw"].replace("- [ ]", "- [x]")
+        if f"`{_now_str()}`" not in done_line:
+            done_line += f" ✅ `{_now_str()}`"
+        done.insert(0, {"raw": done_line, "content": matched["content"], "date": _now_str()})
+
+        state_updates = _clean_reminders(state, [matched["content"]])
+        new_text = _rebuild_todo_md(doing, done)
+        ok = OneDriveIO.write_text(TODO_FILE, new_text)
+
+        if ok:
+            _log(f"[todo.done] 已完成: {matched['content']}")
+            result = {"success": True, "reply": f"已完成「{matched['content']}」✅"}
+            if state_updates:
+                result["state_updates"] = state_updates
+            return result
+        return {"success": False, "reply": "写入 Todo.md 失败"}
+
+
+def _parse_indices(s, max_len):
+    """
+    解析序号字符串，返回 0-based 索引列表。
+    支持: "3" / "2-7" / "1,3,5" / "2、4、6" / "2到7" / "2~7"
+    """
+    s = s.replace("、", ",").replace("到", "-").replace("~", "-").replace("～", "-")
+    # 去掉中文前缀
+    s = re.sub(r'^第', '', s)
+    s = re.sub(r'个$', '', s)
+    indices = set()
+    for part in re.split(r'[,\s]+', s):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            try:
+                a, b = part.split("-", 1)
+                a, b = int(a.strip()), int(b.strip())
+                for i in range(a, b + 1):
+                    if 1 <= i <= max_len:
+                        indices.add(i - 1)
+            except ValueError:
+                continue
+        else:
+            try:
+                n = int(part)
+                if 1 <= n <= max_len:
+                    indices.add(n - 1)
+            except ValueError:
+                continue
+    return sorted(indices)
+
+
+def _clean_reminders(state, completed_contents):
+    """清理已完成待办对应的 reminders"""
+    reminders = state.get("reminders", [])
+    new_reminders = reminders[:]
+    for content in completed_contents:
+        kw = content.lower()
+        new_reminders = [r for r in new_reminders if kw not in r.get("content", "").lower()]
+    if len(new_reminders) != len(reminders):
+        return {"reminders": new_reminders}
+    return {}
 
 
 def list_todos(params, state):
     """
-    查看待办清单。
+    查看待办清单（带序号，用户可用序号引用）。
     """
     text = OneDriveIO.read_text(TODO_FILE)
     if text is None:
@@ -213,8 +286,8 @@ def list_todos(params, state):
     parts = []
     if doing:
         parts.append("📋 进行中:")
-        for item in doing:
-            parts.append(f"  · {item['content']}")
+        for i, item in enumerate(doing, 1):
+            parts.append(f"  {i}. {item['content']}")
     else:
         parts.append("📋 没有进行中的待办")
 

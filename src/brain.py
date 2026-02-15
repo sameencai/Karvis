@@ -284,15 +284,30 @@ def build_system_prompt(state, prompt_futs=None):
 {rules}
 
 ## 输出格式（严格 JSON，不要加 markdown 代码块标记，尽量简短）
+
+单步操作（大多数场景）：
 {{
   "thinking": "一句话推理",
   "skill": "skill.name",
   "params": {{ }},
-  "reply": "简短回复，null 表示不回复",
+  "reply": "简短回复",
   "state_updates": {{ }},
   "memory_updates": [],
   "continue": false
 }}
+
+多步操作（用户一句话包含多个动作时，用 steps 替代 skill+params）：
+{{
+  "thinking": "一句话推理",
+  "steps": [
+    {{"skill": "todo.done", "params": {{"indices": "2-7"}}}},
+    {{"skill": "todo.add", "params": {{"content": "新任务"}}}}
+  ],
+  "reply": "简短回复",
+  "memory_updates": []
+}}
+
+什么时候用 steps：用户一句话提到多个独立操作时（如"帮我加三个待办"、"把2和5完成再加个新的"）。大多数情况用单步格式即可。
 
 continue 说明：仅在使用 internal.* skill（读取/搜索文件）时设为 true，表示还需要更多信息才能完成任务。普通 skill 始终为 false。"""
 
@@ -477,69 +492,53 @@ def process(payload, send_fn=None):
     if decision.get("memory_updates"):
         _log(f"[Brain] 记忆更新: {json.dumps(decision['memory_updates'], ensure_ascii=False)[:200]}")
 
-    skill_name = decision.get("skill", "ignore")
-    params = decision.get("params", {})
     registry = _get_skill_registry()
-    skill_result = None
-    skill_handler = registry.get(skill_name)
 
     # 7. 所有用户消息统一写入 Quick-Notes（原始流水记录）
     #    system 类型、打卡回答除外
-    if payload.get("type") != "system" and skill_name not in ("checkin.answer", "checkin.skip", "checkin.cancel", "checkin.start"):
+    primary_skill = _get_primary_skill(decision)
+    if payload.get("type") != "system" and primary_skill not in ("checkin.answer", "checkin.skip", "checkin.cancel", "checkin.start"):
         _save_to_quick_notes(payload, state)
 
-    # 8. 执行 Skill（note.save 已由上面统一处理，跳过）
-    if skill_name == "note.save":
-        _log(f"[Brain] note.save 已由统一写入处理，跳过 skill 执行")
-        skill_result = {"success": True}
-    elif skill_handler:
-        try:
-            skill_result = skill_handler(params, state)
-            _log(f"[Brain] Skill {skill_name} 执行完成: {skill_result}")
-        except Exception as e:
-            _log(f"[Brain] Skill {skill_name} 执行失败: {e}")
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-    else:
-        _log(f"[Brain] 未知 Skill: {skill_name}")
+    # 8. 执行 Steps（支持单步旧格式 + 多步 steps 格式）
+    steps, step_results = _execute_steps(decision, state, registry)
     t_skill = _time.time()
     _log(f"[Brain][耗时] Skill执行: {t_skill - t_llm:.1f}s")
 
     # V3-F10: Agent Loop — 如果 LLM 返回 continue=true 且 skill 返回 agent_context，进入多轮循环
-    agent_context = skill_result.get("agent_context") if skill_result and isinstance(skill_result, dict) else None
-    if decision.get("continue") and agent_context and skill_name.startswith("internal."):
-        decision, skill_result = _run_agent_loop(
-            system_prompt, user_message, decision, agent_context, state, registry
-        )
-        # 更新 skill_name 为最终决策的 skill
-        skill_name = decision.get("skill", "ignore")
-        t_agent = _time.time()
-        _log(f"[Brain][耗时] Agent Loop: {t_agent - t_skill:.1f}s")
-        t_skill = t_agent
+    if len(steps) == 1 and decision.get("continue"):
+        first_result = step_results[0]["result"] if step_results else {}
+        agent_context = first_result.get("agent_context") if isinstance(first_result, dict) else None
+        first_skill = steps[0].get("skill", "")
+        if agent_context and first_skill.startswith("internal."):
+            decision, last_skill_result = _run_agent_loop(
+                system_prompt, user_message, decision, agent_context, state, registry
+            )
+            steps = [{"skill": decision.get("skill", "ignore"), "params": decision.get("params", {})}]
+            step_results = [{"skill": decision.get("skill", "ignore"), "result": last_skill_result or {"success": True}}]
+            t_agent = _time.time()
+            _log(f"[Brain][耗时] Agent Loop: {t_agent - t_skill:.1f}s")
+            t_skill = t_agent
 
-    # 9. 合并状态更新
-    skill_state_updates = None
-    if skill_result and isinstance(skill_result, dict):
-        skill_state_updates = skill_result.get("state_updates")
+    # 9. 合并状态更新（从所有 step 结果中收集）
+    for sr in step_results:
+        r = sr.get("result", {})
+        if isinstance(r, dict) and r.get("state_updates"):
+            state.update(r["state_updates"])
+    llm_state_updates = decision.get("state_updates", {})
+    if llm_state_updates:
+        state.update(llm_state_updates)
 
-    if skill_state_updates:
-        state.update(skill_state_updates)
-    else:
-        llm_state_updates = decision.get("state_updates", {})
-        if llm_state_updates:
-            state.update(llm_state_updates)
-
-    # 9. 确定最终回复
-    skill_reply = skill_result.get("reply") if skill_result and isinstance(skill_result, dict) else None
-    reply = skill_reply or decision.get("reply")
+    # 10. 智能回复路由：简单 skill 直接用 decision.reply，复杂场景走 Flash 二次加工
+    reply = _resolve_reply(user_text, decision, steps, step_results)
 
     # 兜底：用户消息必须有回复（system 类型除外）
     if not reply and payload.get("type") != "system":
         if decision.get("memory_updates"):
             reply = "记住啦~"
-        elif skill_name == "note.save":
+        elif primary_skill == "note.save":
             reply = "已记录 ✅"
-        elif skill_name == "ignore":
+        elif primary_skill == "ignore":
             reply = "收到~"
         else:
             reply = "好的~"
@@ -724,6 +723,155 @@ def _run_agent_loop(system_prompt, user_message, first_decision, first_context, 
 
 
 # ============ 辅助函数 ============
+
+# ── V4: Flash 回复层 Prompt ──
+FLASH_REPLY_PROMPT = """你是 Karvis 的回复生成模块。根据以下信息生成给用户的最终回复。
+
+规则：
+1. 语气温暖自然，像好朋友聊天，简洁 1-3 句话
+2. 操作成功时用自然语言告知结果，不要机械列出技术细节
+3. 有数据需要展示时（如待办列表），按用户意图组织格式（要序号就加序号、要排序就排序）
+4. 操作失败时友好告知并建议怎么做，不说"技术错误"
+5. 多个操作时汇总结果，不逐个报告
+6. 不用"亲""宝"等过度亲昵称呼，可适度用 emoji
+7. 不要重复用户说过的话，直接给结果
+8. 直接输出回复文本，不要加任何前缀或 JSON 包装"""
+
+# ── V4: 不需要 Flash 加工的简单 skill ──
+_SIMPLE_SKILLS = frozenset({
+    "note.save", "classify.archive", "todo.add", "todo.done",
+    "checkin.start", "checkin.answer", "checkin.skip", "checkin.cancel",
+    "book.create", "book.excerpt", "book.thought", "book.summary", "book.quotes",
+    "media.create", "media.thought",
+    "mood.generate", "voice.journal",
+    "habit.propose", "habit.nudge", "habit.status", "habit.complete",
+    "decision.record",
+})
+
+
+def _get_primary_skill(decision):
+    """从 decision 中提取主 skill 名称（兼容 steps 和旧格式）"""
+    steps = decision.get("steps")
+    if steps and len(steps) > 0:
+        return steps[0].get("skill", "ignore")
+    return decision.get("skill", "ignore")
+
+
+def _execute_steps(decision, state, registry):
+    """
+    V4: 执行 steps 数组中的所有 skill，收集结果。
+    兼容旧格式（单 skill + params）。
+    """
+    steps = decision.get("steps")
+    if not steps:
+        skill = decision.get("skill", "ignore")
+        params = decision.get("params", {})
+        steps = [{"skill": skill, "params": params}]
+
+    results = []
+    for i, step in enumerate(steps):
+        skill_name = step.get("skill", "ignore")
+        params = step.get("params", {})
+        handler = registry.get(skill_name)
+
+        if skill_name == "note.save":
+            _log(f"[Brain] Step {i}: note.save 已由统一写入处理，跳过")
+            results.append({"skill": skill_name, "result": {"success": True}})
+            continue
+        if skill_name == "ignore":
+            results.append({"skill": skill_name, "result": {"success": True}})
+            continue
+        if not handler:
+            _log(f"[Brain] Step {i}: 未知 skill {skill_name}")
+            results.append({"skill": skill_name, "result": {"success": False, "error": f"未知 skill: {skill_name}"}})
+            continue
+
+        try:
+            result = handler(params, state)
+            results.append({"skill": skill_name, "result": result or {"success": True}})
+            _log(f"[Brain] Step {i}: {skill_name} → success={result.get('success') if isinstance(result, dict) else True}")
+        except Exception as e:
+            _log(f"[Brain] Step {i}: {skill_name} 异常: {e}")
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            results.append({"skill": skill_name, "result": {"success": False, "error": str(e)}})
+
+    return steps, results
+
+
+def _resolve_reply(user_text, decision, steps, step_results):
+    """
+    V4: 智能回复路由。
+    简单 skill → 直接用 decision.reply 或 skill.reply
+    复杂场景 → Flash 二次加工
+    """
+    all_skills = [s.get("skill", "ignore") for s in steps]
+    llm_reply = decision.get("reply")
+
+    # 快速路径 1：ignore（纯闲聊），LLM 的 reply 就是最终回复
+    if all_skills == ["ignore"] and llm_reply:
+        return llm_reply
+
+    # 快速路径 2：所有 step 都是简单 skill
+    if all(s in _SIMPLE_SKILLS for s in all_skills):
+        # 优先用 skill 返回的 reply，其次用 LLM 预生成的 reply
+        for sr in step_results:
+            r = sr.get("result", {})
+            if isinstance(r, dict) and r.get("reply"):
+                return r["reply"]
+        return llm_reply
+
+    # 快速路径 3：单步且有 skill_reply 的简单 skill
+    if len(step_results) == 1 and all_skills[0] in _SIMPLE_SKILLS:
+        r = step_results[0].get("result", {})
+        return r.get("reply") if isinstance(r, dict) else llm_reply
+
+    # 复杂路径：需要 Flash 二次加工
+    _log(f"[Brain][V4] 触发 Flash 回复层: skills={all_skills}")
+    t0 = _time.time()
+    flash_reply = _call_flash_for_reply(user_text, decision, steps, step_results)
+    t1 = _time.time()
+    _log(f"[Brain][V4][耗时] Flash回复生成: {t1-t0:.1f}s")
+    return flash_reply or llm_reply
+
+
+def _call_flash_for_reply(user_text, decision, steps, step_results):
+    """V4: 调用 Flash 模型，基于用户意图 + skill 执行结果生成最终回复"""
+    context_parts = []
+    context_parts.append(f"用户消息: {user_text}")
+    context_parts.append(f"AI 判断: {decision.get('thinking', '')}")
+
+    for i, (step, sr) in enumerate(zip(steps, step_results)):
+        skill_name = step.get("skill", "")
+        r = sr.get("result", {})
+        if not isinstance(r, dict):
+            r = {"success": True}
+        success = r.get("success", False)
+        reply_data = r.get("reply", "")
+        error = r.get("error", "")
+
+        if success and reply_data:
+            context_parts.append(f"操作{i+1} [{skill_name}] 成功，数据:\n{reply_data}")
+        elif success:
+            context_parts.append(f"操作{i+1} [{skill_name}] 成功")
+        else:
+            context_parts.append(f"操作{i+1} [{skill_name}] 失败: {error or reply_data}")
+
+    llm_reply = decision.get("reply", "")
+    if llm_reply:
+        context_parts.append(f"AI 预生成回复（仅供参考）: {llm_reply}")
+
+    context = "\n".join(context_parts)
+
+    try:
+        reply = call_llm([
+            {"role": "system", "content": FLASH_REPLY_PROMPT},
+            {"role": "user", "content": context}
+        ], model_tier="flash", max_tokens=300, temperature=0.5)
+        return reply
+    except Exception as e:
+        _log(f"[Brain][V4] Flash 回复生成失败: {e}")
+        return None
 
 def _save_to_quick_notes(payload, state):
     """所有用户消息统一写入 Quick-Notes（原始流水记录）"""
