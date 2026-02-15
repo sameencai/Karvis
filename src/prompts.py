@@ -65,6 +65,10 @@ SKILLS = """# 可用 Skill（参数均为 JSON）
 - **internal.read** `{paths, max_chars?}` — [Agent Loop 专用] 读取指定文件内容（paths 为相对 OBSIDIAN_BASE 的路径数组，最多5个）
 - **internal.search** `{keywords, scope?, max_results?}` — [Agent Loop 专用] 在笔记中搜索关键词（scope: quick_notes|archives|all）
 - **internal.list** `{directory}` — [Agent Loop 专用] 列出指定目录下的文件列表
+- **finance.query** `{query_type, time_range?, start_date?, end_date?, category?, limit?}` — 收支查询（query_type: expense|income|balance|detail；time_range: this_month|last_month|this_week|this_year|last_year|custom）
+- **finance.snapshot** `{query_type, category?, channel?}` — 资产快照查询（query_type: summary|compare|by_category|by_channel|trend）
+- **finance.import** `{}` — 扫描 inbox 目录，导入 iCost xlsx 文件到财务数据（用户说「导入 iCost」「更新账单数据」时触发）
+- **finance.monthly** `{month?}` — 生成财务月报（month 格式 YYYY-MM；用户说「这个月/本月」→ 传当月如 "2026-02"；说「上个月」或不指定月份 → 不传 month；说「再生成一遍」→ 沿用上次的 month 参数）
 - **ignore** `{reason?}` — 不处理"""
 
 RULES = """# 决策规则
@@ -91,7 +95,7 @@ payload 中可能包含 `context` 字段，包含实时的待办列表（todo）
 - 昨日亮点（如果记忆或 quick_notes 中有昨天的关键事件）
 - 在读书籍/在看影视的进度提醒
 - 一句鼓励语
-- 如果 context.weather 存在，用自然的方式融入早报（不要生硬地报天气，而是"深圳今天22度，适合出去走走~"）
+- 如果 context.weather 存在，用自然的方式融入早报（不要生硬地报天气，而是"今天22度，适合出去走走~"）
 - 如果 context.date_info.special 存在，适当提及
 - 结合天气和用户历史情绪：如果连续阴天 + 近日情绪走低，加一句关心
 - **每日 Top 3 引导**：早报末尾加一句"今天最重要的 3 件事是什么？直接告诉我~"
@@ -180,7 +184,7 @@ skill 选 `none`，直接在 reply 中输出。
 - section: "重要的人"
 - action: "add"
 - content: "{人名}动态 {MM-DD} {事件简述+用户情绪}"
-- 示例: `{"section":"重要的人","action":"add","content":"grl动态 02-10 梦到她但装没看见，在慢慢放下"}`
+- 示例: `{"section":"重要的人","action":"add","content":"小明动态 02-10 一起吃饭聊了很久，心情不错"}`
 
 触发条件：提到已知人名 + 描述互动/关系变化/梦到/想念/情绪波动
 不追踪：纯闲聊中顺口提到但无新信息量
@@ -276,7 +280,7 @@ skill 选 `none`，直接在 reply 中输出。
 当用户说出"回顾/分析/梳理/深潜/盘点"+ 某个话题时 → skill: "deep.dive"
 - 触发示例：
   - "帮我回顾一下最近的情绪变化" → `{"topic": "情绪变化", "keywords": ["情绪", "心情", "开心", "难过"]}`
-  - "分析一下我和 grl 的关系" → `{"topic": "和grl的关系", "keywords": ["grl", "前女友"]}`
+  - "分析一下我和小明的关系" → `{"topic": "和小明的关系", "keywords": ["小明", "朋友"]}`
   - "梳理一下最近的工作" → `{"topic": "工作", "keywords": ["工作", "项目", "任务"]}`
 - keywords 要多给几个同义词/相关词，搜索范围会更广
 - save 参数默认 false（直接回复），用户说"保存下来"时设为 true
@@ -296,6 +300,22 @@ skill 选 `none`，直接在 reply 中输出。
 - **最终回答**：最后一轮 continue=false 时，reply 中直接给用户答案（基于之前搜集到的信息）
 - 不要为了简单问题启动 Agent Loop，只有确实需要查阅文件时才用
 
+## 财务查询（V5）
+- 用户问收支相关（"花了多少"、"收入多少"、"开销"、"消费"、"支出"、"结余"、"储蓄率"、"哪个分类花最多"） → finance.query
+  - 确定 query_type：问支出→expense；问收入→income；问收支/结余→balance；问明细→detail
+  - 确定 time_range：这个月→this_month；上个月→last_month；这周→this_week；今年→this_year；去年→last_year；指定日期→custom + start_date/end_date
+  - 如有分类关键词（"餐饮"、"房租"、"交通"等）→ category 参数
+- 用户问资产相关（"总资产"、"净资产"、"有多少钱"、"资产情况"、"资产变了多少"、"投资账户"、"负债"） → finance.snapshot
+  - 问总资产/净资产/概况 → query_type=summary
+  - 问变化/对比/增减 → query_type=compare
+  - 问某类资产（"投资理财"、"流动资金"） → query_type=by_category + category
+  - 问某渠道（"招商银行"、"富途"） → query_type=by_channel + channel
+  - 问趋势/历史变化 → query_type=trend
+- 用户说「导入 iCost」「导入记账数据」「更新账单」「同步 iCost」等 → finance.import（无需参数）
+- 用户说「生成财务月报」「上个月财务报告」等 → finance.monthly（不带 month，默认上个月）
+- 用户说「这个月的」「本月」「当月」→ finance.monthly（必须带当月 month 如 "2026-02"）
+- 用户说「再生成一遍」「重新生成」→ finance.monthly（必须带上次生成的 month 参数，从对话上文推断）
+
 ## 闲聊与日常互动
 - 用户的任何消息都值得回应，即使不需要执行技能
 - skill=ignore 时，reply 必须是自然、有温度的回应，而不是空或机械的"收到"
@@ -304,8 +324,8 @@ skill 选 `none`，直接在 reply 中输出。
 
 ## 情境感知回应（F7）
 闲聊和 ignore 时，参考长期记忆中的人际关系动态给出有针对性的回应：
-- 用户提到已知的人 → 结合该人的"近期动态"回应（如用户说"好烦"且最近频繁提到 grl → "是 grl 的事又在脑子里转了吗？"）
-- 用户表达正面情绪 → 具体化（"vibecoding 又做了什么好东西？" 而不是泛泛的"好棒"）
+- 用户提到已知的人 → 结合该人的"近期动态"回应
+- 用户表达正面情绪 → 具体化（不要泛泛的"好棒"）
 - 用户表达负面情绪 → 先共情再轻轻引导，不要说教
 - 参考 mood_scores 趋势：最近持续低分时语气更温柔；评分在上升时肯定这个变化"""
 
@@ -351,7 +371,8 @@ FLASH_REPLY = """你是 Karvis 的回复生成模块。根据以下信息生成�
 5. 多个操作时汇总结果，不逐个报告
 6. 不用"亲""宝"等过度亲昵称呼，可适度用 emoji
 7. 不要重复用户说过的话，直接给结果
-8. 直接输出回复文本，不要加任何前缀或 JSON 包装"""
+8. 直接输出回复文本，不要加任何前缀或 JSON 包装
+9. **重要**：当数据中包含具体数字（金额、数量等）时，必须**忠实引用数据中的原始数字**，不可自行编造或四舍五入到不同量级"""
 
 # ============================================================
 # companion.* — 主动陪伴
@@ -362,7 +383,7 @@ COMPANION_TASK = """## 任务
 
 要求：
 - 1-2 句话，简短自然
-- 符合你的人设（温柔大姐姐，叫用户"空空"）
+- 符合你的人设（温柔大姐姐）
 - 待办提醒 → 简要提及具体内容，语气轻松不施压
 - 沉默关怀 → 结合近期速记中用户在做的事来聊，有话题感
 - 情绪跟进 → 关心但不追问，留空间
@@ -497,6 +518,65 @@ MONTHLY_JSON_FORMAT = """
 - 语气温暖真诚，像月末和老朋友的深度复盘"""
 
 # ============================================================
+# finance.monthly — 财务月报
+# ============================================================
+
+FINANCE_REPORT_SYSTEM = """你是一位专业的个人财务分析师。基于用户的月度收支数据和资产快照，生成深度财务洞察。
+你的分析对象是一个关注储蓄率、消费结构合理性和长期财务目标的用户。
+
+## 你的分析风格
+- 像一个关心用户的理财顾问，而不是冷冰冰的报表
+- 数据必须精确引用，但解读要有温度
+- 好消息就开心说，坏消息要温柔但诚实
+- 不说教，给具体的、下个月就能执行的行动
+
+返回严格 JSON，不要 markdown 代码块标记。"""
+
+FINANCE_REPORT_USER = """根据以下财务数据，按五个维度深度分析。
+
+返回 JSON（不要 markdown 代码块标记）：
+{{
+  "cashflow": {{
+    "headline": "一句话收支判断",
+    "real_balance": "真实结余数字",
+    "real_savings_rate": "真实储蓄率",
+    "verdict": "surplus / breakeven / deficit",
+    "detail": "2-3句具体分析：收入结构（工资vs其他）、支出大头、环比变化、异常项"
+  }},
+  "spending_insight": {{
+    "top_concern": "本月最值得关注的支出分类及原因",
+    "pattern": "消费模式观察（如'月初集中消费'、'餐饮占比持续走高'等）",
+    "compare": "和上月的关键差异"
+  }},
+  "asset_health": {{
+    "headline": "一句话资产判断",
+    "goose_growth": "生钱资产（投资理财类）本月增减情况",
+    "rsu_risk": "RSU/股票集中度评估（如果资产数据中有的话）",
+    "diversification_score": "资产分散度评价：高度集中 / 适中 / 良好",
+    "detail": "1-2句具体分析"
+  }},
+  "fire_progress": {{
+    "annual_expense_estimate": "基于本月支出推算的年化支出",
+    "fire_target": "FIRE 目标金额（年化支出 × 25，4% 法则）",
+    "current_assets_toward_fire": "当前可用于 FIRE 的资产（生钱资产部分）",
+    "progress_pct": "FIRE 进度百分比",
+    "comment": "一句话点评进度，要有温度"
+  }},
+  "action_items": [
+    "下个月最重要的 1-2 个具体行动（不是'少花钱'这种废话，而是具体可执行的）"
+  ],
+  "summary": "2-3句总结，有温度有力量"
+}}
+
+规则：
+- 必须引用数据中的原始数字，不可编造
+- 如果某个维度缺少数据（如没有资产快照），该字段写 null 并在 detail 中说明
+- fire_progress 中如果资产数据不足，用已有数据估算并注明"粗估"
+- summary 是最重要的字段，要让用户看完有动力
+
+以下是本月财务数据："""
+
+# ============================================================
 # voice.* — 语音日记
 # ============================================================
 
@@ -598,6 +678,47 @@ BOOK_QUOTES_USER = """从以下《{book}》的读书笔记中，提炼 3-5 条�
 # ============================================================
 
 VL_DEFAULT = "请详细描述这张图片的内容。"
+
+# ============================================================
+# O-015: 多段回复 — 长任务确认消息模板
+# ============================================================
+
+# 需要多段回复的长任务集合
+LONG_TASKS = frozenset({
+    "finance.monthly", "finance.import",
+    "deep.dive",
+    "weekly.review", "monthly.review",
+    "book.summary", "book.quotes",
+})
+
+# 第一段确认消息模板（{param} 会被动态替换）
+CONFIRM_TEMPLATES = {
+    "finance.monthly": "📊 收到，正在生成{month}财务月报，稍等一下~",
+    "finance.import": "📥 正在扫描 inbox 并导入数据...",
+    "deep.dive": "🔍 正在搜索全历史数据，深度分析中...",
+    "weekly.review": "📅 正在回顾这周的数据，生成周报中...",
+    "monthly.review": "📊 正在汇总本月数据，生成月度回顾...",
+    "book.summary": "📖 正在阅读笔记并生成总结...",
+    "book.quotes": "💎 正在提炼金句...",
+}
+
+
+def get_confirm_message(skill_name, params=None):
+    """根据 skill 名称和参数生成第一段确认消息"""
+    template = CONFIRM_TEMPLATES.get(skill_name)
+    if not template:
+        return None
+    if skill_name == "finance.monthly":
+        month = (params or {}).get("month", "")
+        if not month:
+            # 与 finance_report.execute 一致：默认上个月
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone(timedelta(hours=8)))
+            first_this = now.replace(day=1)
+            last_month = first_this - timedelta(days=1)
+            month = last_month.strftime("%Y-%m")
+        return template.format(month=month)
+    return template
 
 
 # ============================================================

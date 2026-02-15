@@ -949,6 +949,14 @@ def _parse_llm_output(text):
     """解析 LLM 输出的 JSON（容错处理）"""
     text = text.strip()
 
+    # 剥离 thinking 模式的 <think>...</think> 标签（防御性处理）
+    if "<think>" in text:
+        think_end = text.find("</think>")
+        if think_end >= 0:
+            text = text[think_end + len("</think>"):].strip()
+        else:
+            text = text.replace("<think>", "").strip()
+
     # 去除 markdown 代码块标记
     if text.startswith("```"):
         lines = text.split("\n")

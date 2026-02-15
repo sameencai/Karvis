@@ -178,3 +178,52 @@ class LocalFileIO:
         except Exception as e:
             _log(f"[LocalIO] 二进制写入异常 {file_path}: {e}")
             return False
+
+    # ---- 二进制文件下载 ----
+
+    @classmethod
+    def download_binary(cls, file_path, _retries=3):
+        """读取二进制文件内容。文件不存在返回 None。"""
+        local_path = cls._resolve_path(file_path)
+        try:
+            if not os.path.exists(local_path):
+                _log(f"[LocalIO] 文件不存在 {file_path}")
+                return None
+            with open(local_path, "rb") as f:
+                data = f.read()
+            _log(f"[LocalIO] 二进制读取OK {file_path} size={len(data)}")
+            return data
+        except Exception as e:
+            _log(f"[LocalIO] 二进制读取异常 {file_path}: {e}")
+            return None
+
+    # ---- 目录列表 ----
+
+    @classmethod
+    def list_children(cls, folder_path, _retries=3):
+        """列出文件夹下的子项（文件和子目录）。
+        
+        返回格式与 OneDriveIO 对齐:
+          list[dict] — 每项含 name, size, file/folder 等。
+          文件夹不存在返回空列表，失败返回 None。
+        """
+        local_path = cls._resolve_path(folder_path)
+        try:
+            if not os.path.exists(local_path):
+                _log(f"[LocalIO] 目录不存在 {folder_path}")
+                return []
+            items = []
+            for entry in os.listdir(local_path):
+                full = os.path.join(local_path, entry)
+                item = {"name": entry}
+                if os.path.isfile(full):
+                    item["file"] = {"mimeType": "application/octet-stream"}
+                    item["size"] = os.path.getsize(full)
+                else:
+                    item["folder"] = {"childCount": 0}
+                items.append(item)
+            _log(f"[LocalIO] 列目录OK {folder_path}: {len(items)} 项")
+            return items
+        except Exception as e:
+            _log(f"[LocalIO] 列目录异常 {folder_path}: {e}")
+            return None

@@ -320,3 +320,72 @@ class OneDriveIO:
 
         _log(f"[OneDrive] 分片上传完成: {file_path}")
         return True
+
+    # ---- 目录列表 ----
+
+    @classmethod
+    def list_children(cls, folder_path, _retries=3):
+        """列出 OneDrive 文件夹下的子项（文件和子目录）。
+        
+        返回: list[dict] — 每项含 name, size, lastModifiedDateTime, file/folder 等。
+              文件夹不存在返回空列表，失败返回 None。
+        """
+        token = cls.get_token()
+        if not token:
+            return None
+        url = f"https://graph.microsoft.com/v1.0/me/drive/root:{folder_path}:/children"
+        headers = {"Authorization": f"Bearer {token}"}
+        for attempt in range(1, _retries + 1):
+            try:
+                t0 = time.time()
+                resp = _graph_session.get(url, headers=headers, timeout=(5, 10))
+                elapsed = time.time() - t0
+                if resp.status_code == 200:
+                    items = resp.json().get("value", [])
+                    _log(f"[OneDrive] 列目录OK {folder_path}: {len(items)}项 ({elapsed:.1f}s)")
+                    return items
+                elif resp.status_code == 404:
+                    _log(f"[OneDrive] 目录不存在 {folder_path}")
+                    return []
+                _log(f"[OneDrive] 列目录失败 {folder_path}: {resp.status_code} ({elapsed:.1f}s)")
+                return None
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, ConnectionError):
+                _log(f"[OneDrive] 列目录超时(第{attempt}次) {folder_path}: {time.time()-t0:.1f}s")
+                if attempt < _retries:
+                    continue
+                return None
+            except Exception as e:
+                _log(f"[OneDrive] 列目录异常 {folder_path}: {e}")
+                return None
+
+    # ---- 二进制文件下载 ----
+
+    @classmethod
+    def download_binary(cls, file_path, _retries=3):
+        """下载文件二进制内容。文件不存在返回 None，失败返回 None。"""
+        token = cls.get_token()
+        if not token:
+            return None
+        url = f"https://graph.microsoft.com/v1.0/me/drive/root:{file_path}:/content"
+        headers = {"Authorization": f"Bearer {token}"}
+        for attempt in range(1, _retries + 1):
+            try:
+                t0 = time.time()
+                resp = _graph_session.get(url, headers=headers, timeout=(5, 30))
+                elapsed = time.time() - t0
+                if resp.status_code == 200:
+                    _log(f"[OneDrive] 下载OK {file_path}: {len(resp.content)}B ({elapsed:.1f}s)")
+                    return resp.content
+                elif resp.status_code == 404:
+                    _log(f"[OneDrive] 文件不存在 {file_path}")
+                    return None
+                _log(f"[OneDrive] 下载失败 {file_path}: {resp.status_code} ({elapsed:.1f}s)")
+                return None
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, ConnectionError):
+                _log(f"[OneDrive] 下载超时(第{attempt}次) {file_path}: {time.time()-t0:.1f}s")
+                if attempt < _retries:
+                    continue
+                return None
+            except Exception as e:
+                _log(f"[OneDrive] 下载异常 {file_path}: {e}")
+                return None
